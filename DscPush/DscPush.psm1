@@ -480,6 +480,7 @@ function Copy-RemoteContent
     
     #Create CIM & PS Session
     $targetCimSession = New-CimSession -ComputerName $Target -Credential $Credential -ErrorAction Stop
+    $targetPSSession = New-PSSession -ComputerName $Target -Credential $Credential -ErrorAction Stop
 
     #Enable SMB firewall and update GP if SMB test fails
     if (! (Test-NetConnection -ComputerName $Target -CommonTCPPort SMB -InformationLevel Quiet -InformationAction SilentlyContinue))
@@ -487,7 +488,6 @@ function Copy-RemoteContent
         Copy-NetFirewallRule -CimSession $targetCimSession -NewPolicyStore localhost -DisplayName 'File and Printer Sharing (SMB-In)' -ErrorAction Ignore
         Enable-NetFirewallRule -CimSession $targetCimSession -PolicyStore localhost
         
-        $targetPSSession = New-PSSession -ComputerName $Target -Credential $Credential
         Invoke-Command -Session $targetPSSession -ScriptBlock {
             $null = cmd.exe /c gpupdate /force
         }
@@ -497,12 +497,29 @@ function Copy-RemoteContent
     #Enable SMB encryption
     Set-SmbServerConfiguration -CimSession $targetCimSession -EncryptData $true -Confirm:$false
         
-    #Connect to host from target and create PSDrive mapping destination folder
+    #Connect to target and create destination folder
     $destinationUNC = $Destination.Replace(":","$")
-    if (! (Test-Path "\\$Target\$destinationUNC"))
+    $i = 0
+
+    while (! (Test-Path "\\$Target\$destinationUNC"))
     {
-        $null = New-Item -Type Directory -Path "\\$Target\$destinationUNC" -ErrorAction Stop
+        #Create the destination directory using PSsession because New-Item has issues with passing credentials
+        Invoke-Command -Session $targetPSSession -ScriptBlock {
+            $null = New-Item -Type Directory -Path $using:Destination -ErrorAction Ignore
+        }
+
+        #Give FS some time to catch up
+        sleep 1
+
+        #give up after 10 attempts
+        $i++
+        if ($i -eq 10)
+        {
+            throw "Could not create destination folder."
+        }
     }
+
+    #Create PSDrive mapping destination folder so we can use SMB instead of WinRM
     $psDrive = New-PSDrive -Name Y -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential
     
     #Create root directory and copy content
@@ -663,6 +680,10 @@ function Initialize-TargetLcm
         [parameter()]
         [string]
         $CorePartial,
+
+        [parameter()]
+        [pscredential]
+        $Credential,
 
         [parameter()]
         [string]
