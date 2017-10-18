@@ -18,7 +18,8 @@ DscPush is a DSC Configuration publishing framework. It consists of a module (Ds
 
 # Concept of Operations
 
-1. Run $\DscPushSetup\Initialize-DscPush.ps1 -GeneratePartialCatalog
+1. Generate your Partial Catalog 
+   - Run $\DscPushSetup\Initialize-DscPush.ps1 -GeneratePartialCatalog
 2. Populate Node Template File ($\DscPushSetup\Settings\NodeTemplate.ps1)
    - Edit Node and Config properties to match infrastructure
      - ConfigName
