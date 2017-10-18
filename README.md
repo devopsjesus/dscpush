@@ -37,15 +37,21 @@ DscPush is a DSC Configuration publishing framework. It consists of a module (Ds
      - TargetIP
      - ContentHost
      - RoleList (List of partials that apply to the Config)
-3. Securely store credentials required by partials
+3. Generate your Node Definition File
+   -Run $\DscPushSetup\Initialize-DscPush.ps1 -GenerateNewNodeDefinitionFile -NodeDefinitionFilePath $filePath
+     - Inputs
+       - Partial Catalog Path (Generated in Step 1.)
+       - Node Template File Path (Edited in Step 2.)
+       - Node Definition File Path (Location for Generating Node Definition File. e.g. $\DscPushSetup\DefinitionStore\NodeDefinition.ps1)
+     - Outputs
+       - Node Definition File
+4. Securely store credentials required by partials
    - Run $\DscPushSetup\Initialize-DscPush.ps1 -GenerateSecrets
-4. Run $\DscPushSetup\Initialize-DscPush.ps1 -GenerateNewNodeDefinitionFile -NodeDefinitionFilePath $filePath
-   - Inputs
-     - Partial Catalog Path (Generated in Step 1.)
-     - Node Template File Path (Edited in Step 2.)
-     - Node Definition File Path (Location for Generating Node Definition File. e.g. $\DscPushSetup\DefinitionStore\NodeDefinition.ps1)
-   - Outputs
-     - Node Definition File
+     - Inputs
+       - Node Definition File Path (Generated in Step 3 and modified in Step 4)
+     - Outputs
+       - Securely Stored Secrets File (e.g. $\DscPushSetup\Settings\StoredSecrets.ps1)
+       - Secrets Key File - 256 bit AES Key (e.g. $\DscPushSetup\Settings\SecretsKey.json)
 5. Edit Node Definition File
    - Replace all instances of “ENTER_VALUE_HERE” with appropriate target config values.
 6. Run $\DscPushSetup\Publish-RpsConfiguration.ps1
