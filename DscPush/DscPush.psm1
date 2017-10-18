@@ -665,6 +665,10 @@ function Initialize-TargetLcm
         $CorePartial,
 
         [parameter()]
+        [pscredential]
+        $Credential,
+
+        [parameter()]
         [string]
         $MofOutputPath
     )
@@ -699,7 +703,7 @@ function Initialize-TargetLcm
 
     $null = TargetConfiguration -OutputPath $mofOutputPath -ErrorAction Stop
     
-    $null = Set-DscLocalConfigurationManager -ComputerName $TargetConfig.TargetIP -Path $mofOutputPath -Credential $DeploymentCredential -Force -ErrorAction Stop
+    $null = Set-DscLocalConfigurationManager -ComputerName $TargetConfig.TargetIP -Path $mofOutputPath -Credential $Credential -Force -ErrorAction Stop
 }
 
 function Send-Config
