@@ -157,6 +157,7 @@ foreach ($config in $targetConfigs.Configs)
         TargetLcmSettings = $TargetLcmSettings
         TargetConfig = $config
         CorePartial = $corePartial
+        Credential = $DeploymentCredential
         MofOutputPath = $mofOutputPath
     }
     Initialize-TargetLcm @TargetLcmParams
