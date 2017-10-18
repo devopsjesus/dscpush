@@ -119,7 +119,7 @@ foreach ($config in $targetConfigs.Configs)
     #Try to reach the target first. might need to mature this into function as we add non-windows devices
     try
     {
-        $test = Test-WSMan $config.TargetIP -ErrorAction Stop
+        $null = Test-WSMan $config.TargetIP -ErrorAction Stop
     }
     catch
     {

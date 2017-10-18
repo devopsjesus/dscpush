@@ -63,7 +63,7 @@ Import-Module -FullyQualifiedName $DSCPushModulePath
 
 if ($GeneratePartialCatalog)
 {
-    Write-Host "Generating Partial Catalog"
+    Write-Output "Generating Partial Catalog"
     $NewPartialCatalogParams = @{
         PartialStorePath = $PartialStorePath
         PartialCatalogPath = $PartialCatalogPath
@@ -73,7 +73,7 @@ if ($GeneratePartialCatalog)
 
 if ($GenerateSecrets)
 {
-    Write-Host "Geneterating Secrets files"
+    Write-Output "Geneterating Secrets files"
     $newSecretsFileParams = @{
         ContentStoreRootPath = $ContentStoreRootPath
         PartialCatalogPath = $PartialCatalogPath
@@ -84,7 +84,7 @@ if ($GenerateSecrets)
 
 if ($GenerateNewNodeDefinitionFile)
 {
-    Write-Host "Generating New Node Definition File from template"
+    Write-Output "Generating New Node Definition File from template"
     $newNodeDefinitionFileParams = @{
         ContentStoreRootPath = $ContentStoreRootPath
         PartialCatalogPath = $PartialCatalogPath
@@ -96,7 +96,7 @@ if ($GenerateNewNodeDefinitionFile)
 
 if ($UpdateNodeDefinitionFile)
 {
-    Write-Host "Updating Existing Node Definition File with Partial Catalog updates"
+    Write-Output "Updating Existing Node Definition File with Partial Catalog updates"
     $UpdateNodeDefinitionFileParams = @{
         ContentStoreRootPath = $ContentStoreRootPath
         PartialCatalogPath = $PartialCatalogPath
