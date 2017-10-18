@@ -26,3 +26,6 @@ DscPush is a DSC Configuration publishing framework. It consists of a module (Ds
 * DscPush was written on WMF5.1
 * Ability to establish CimSessions to target device.
 
+## Architecture
+
+![DscPush Architecture](https://github.com/devopsjesus/dscpush/blob/master/architecture.png)
