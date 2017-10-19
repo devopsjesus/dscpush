@@ -504,7 +504,7 @@ function Copy-RemoteContent
     $targetPSSession = New-PSSession -ComputerName $Target -Credential $Credential -ErrorAction Stop
 
     #Enable SMB firewall and update GP if SMB test fails
-    if (! (Test-NetConnection -ComputerName $Target -CommonTCPPort SMB -InformationLevel Quiet -InformationAction SilentlyContinue))
+    if (! (Test-NetConnection -ComputerName $Target -CommonTCPPort SMB -InformationLevel Quiet -WarningAction SilentlyContinue))
     {
         Copy-NetFirewallRule -CimSession $targetCimSession -NewPolicyStore localhost -DisplayName 'File and Printer Sharing (SMB-In)' -ErrorAction Ignore
         Enable-NetFirewallRule -CimSession $targetCimSession -PolicyStore localhost
@@ -512,7 +512,6 @@ function Copy-RemoteContent
         Invoke-Command -Session $targetPSSession -ScriptBlock {
             $null = cmd.exe /c gpupdate /force
         }
-        Remove-PSSession -Session $targetPSSession
     }
 
     #Enable SMB encryption
@@ -532,7 +531,7 @@ function Copy-RemoteContent
     #Create PSDrive mapping destination folder so we can use SMB instead of WinRM
     while(! (Get-PSDrive -Name Y -PSProvider "filesystem" -ErrorAction Ignore))
     {
-        $psDrive = New-PSDrive -Name Y -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential
+        $psDrive = New-PSDrive -Name Y -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential -ErrorAction Ignore
         sleep 1
 
         #Throw after 5 seconds
@@ -551,6 +550,7 @@ function Copy-RemoteContent
     #Cleanup
     Remove-PSDrive -Name $psDrive -ErrorAction Ignore
     Remove-CimSession -CimSession $targetCimSession
+    Remove-PSSession -Session $targetPSSession
 }
 
 function Initialize-DeploymentEnvironment
