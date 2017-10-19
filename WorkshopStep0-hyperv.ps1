@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5 –Modules Hyper-V -RunAsAdministrator
 
 param(
-    $VhdPath = "C:\Users\Public\Documents\Hyper-V\Virtual hard disks\win2016.vhdx",
+    $VhdPath = "C:\Users\Public\Documents\Hyper-V\Virtual hard disks\win2016core.vhdx",
 
     $VSwitchName = "DscPush-vSwitch1",
 
