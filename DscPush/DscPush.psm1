@@ -849,7 +849,7 @@ function New-PartialCatalog
     $partialCatalog = Register-DscPartialCatalog -PartialStore $PartialStorePath
     $json = ConvertTo-Json -InputObject $partialCatalog -Depth 7
     Out-File -FilePath $PartialCatalogPath -InputObject $json
-    Write-Output "Partial Catalog location: $PartialCatalogPath"
+    return $PartialCatalogPath
 }
 
 function New-SecretsFile
