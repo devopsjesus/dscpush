@@ -18,7 +18,7 @@
 
     [Parameter()]
     [string]
-    $ContentStoreRootPath = "C:\ContentStore",
+    $ContentStoreRootPath = "C:\workshop",
     
     [Parameter()]
     [string]
@@ -38,7 +38,7 @@
     
     [Parameter()]
     [string]
-    $PartialStorePath = "$ContentStoreRootPath\DSC\PartialConfiguration",
+    $PartialStorePath = "$ContentStoreRootPath\Partials",
 
     [Parameter()]
     [string]

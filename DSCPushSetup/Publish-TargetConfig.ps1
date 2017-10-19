@@ -1,6 +1,6 @@
 ﻿param
 (
-    [Parameter()]
+    [Parameter(Mandatory)]
     [pscredential]
     $DeploymentCredential,
 
