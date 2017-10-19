@@ -6,7 +6,7 @@
      - 192.0.0.251
      - 192.0.0.253
 1. Download this repository
-   - https://github.com/devopsjesus/dscpush/master.zip
+   - https://github.com/devopsjesus/dscpush/archive/master.zip
    - Copy the Workshop* files to an accessible location (e.g. Desktop)
 1. Run elevated PowerShell console
    - Change Directory to the directory containing the Workshop* files
