@@ -7,7 +7,7 @@
      - 192.0.0.253
 1. Download this repository
    - https://github.com/devopsjesus/dscpush/archive/master.zip
-   - Extract the Workshop*.ps1 files to an accessible location (e.g. Desktop)
+   - Extract the Workshop*.ps1 files to an accessible location (e.g. Desktop)
 1. Run elevated PowerShell console
    - Change Directory to the directory containing the Workshop* files
 1. Run WorkshopStep1.ps1
