@@ -38,7 +38,7 @@ DscPush is a DSC Configuration publishing framework. It consists of a module (Ds
      - ContentHost
      - RoleList (List of partials that apply to the Config)
 3. Generate your Node Definition File
-   -Run $\DscPushSetup\Initialize-DscPush.ps1 -GenerateNewNodeDefinitionFile -NodeDefinitionFilePath $filePath
+   - Run $\DscPushSetup\Initialize-DscPush.ps1 -GenerateNewNodeDefinitionFile -NodeDefinitionFilePath $filePath
      - Inputs
        - Partial Catalog Path (Generated in Step 1.)
        - Node Template File Path (Edited in Step 2.)
