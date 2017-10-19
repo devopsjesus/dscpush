@@ -9,6 +9,8 @@ $RequiredDscResources = @(
 )
 
 $null = New-Item -Path $WorkshopPath -ItemType Directory -Force
+
+$currentDir = (Get-Item .).FullName
 cd $WorkshopPath
 
 #Download DscPush from GitHub and copy to $WorkshopPath
@@ -35,6 +37,4 @@ $RequiredDscResources.ForEach({
     Copy-Item -Path "C:\Program Files\WindowsPowerShell\Modules\$_\*" -Destination "$WorkshopPath\Resources\$_" -Recurse -Force
 })
 
-
-
-
+cd $currentDir

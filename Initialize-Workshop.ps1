@@ -19,6 +19,7 @@ Import-Module -FullyQualifiedName $DSCPushModulePath
 $null = New-Item -Path "$SetupFolder\DefinitionStore"-ItemType Directory -Force
 $NodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\workshop.ps1"
 
+$currentDir = (Get-Item .).FullName
 cd $SetupFolder
 
 $partialCatalogPath = .\Initialize-DscPush.ps1 -GeneratePartialCatalog
@@ -35,7 +36,7 @@ Remove-Item -Path $NodeDefinitionFilePath -ErrorAction SilentlyContinue
 #region Update Node Definition
 $nodeDefinition = . $NodeDefinitionFilePath
 
-$nodeDefinition.Configs[0].TargetIP = "192.0.1.253"
+$nodeDefinition.Configs[0].TargetIP = "192.0.0.253"
 $nodeDefinition.Configs[0].Variables = @{
     DomainName = "DscPush.local"
     NetworkConfig = '[
@@ -44,8 +45,8 @@ $nodeDefinition.Configs[0].Variables = @{
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
         "Alias":  "Ethernet",
-        "IPAddress":  "192.0.1.253",
-        "DNSServer":  "192.0.1.253"
+        "IPAddress":  "192.0.0.253",
+        "DNSServer":  "192.0.0.253"
     }
 ]'
     JoinDomain = "false"
@@ -53,7 +54,7 @@ $nodeDefinition.Configs[0].Variables = @{
     ContentStore = "\\CH\C$\ContentStore"
 }
 
-$nodeDefinition.Configs[1].TargetIP = "192.0.1.251"
+$nodeDefinition.Configs[1].TargetIP = "192.0.0.251"
 $nodeDefinition.Configs[1].Variables = @{
     DomainName = "DscPush.local"
     NetworkConfig = '[
@@ -62,8 +63,8 @@ $nodeDefinition.Configs[1].Variables = @{
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
         "Alias":  "Ethernet",
-        "IPAddress":  "192.0.1.251",
-        "DNSServer":  "192.0.1.253"
+        "IPAddress":  "192.0.0.251",
+        "DNSServer":  "192.0.0.253"
     }
 ]'
     JoinDomain = "true"
@@ -81,3 +82,5 @@ DSCPush\Export-NodeDefinitionFile -NodeDefinition $nodeDefinition -UpdateNodeDef
 #endregion
 
 .\Publish-TargetConfig.ps1 -ForceResourceCopy -SanitizeModulePaths
+
+cd $currentDir
