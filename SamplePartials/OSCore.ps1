@@ -113,58 +113,6 @@ Configuration OSCore
                 InterfaceAlias = $interfaceAlias
                 AddressFamily = $addressFamily
             }
-
-            if ($networkProfile -eq "DomainAuthenticated")
-            {
-
-                #Set dependencies for Domain configurations
-                $domainJoinDependsOn += @("[xIPAddress]$interfaceAlias-$ipAddress")
-                $domainJoinDependsOn += @("[xDNSServerAddress]$interfaceAlias-$dnsAddress")
-
-                Script "$interfaceAlias-ConnectionProfile"
-                {
-                    GetScript = {
-                        $currentConnectionProfiles = Get-NetConnectionProfile -InterfaceAlias $using:interfaceAlias
-
-                        return @{
-                            Result = $currentConnectionProfiles
-                        }
-                    }
-
-                    SetScript = {
-                        Set-NetConnectionProfile -InterfaceAlias $using:interfaceAlias -NetworkCategory $using:networkProfile
-
-                        #Restart the Network Location Awareness (NLA) service to ensure network category is set correctly
-                        #if it is still different than the category passed by the configuration.
-                        if($currentNetworkProfile.NetworkCategory -ne $using:networkProfile)
-                        {
-                            Restart-Service "NLASVC" -Force -Verbose
-                        }
-                    }
-
-                    TestScript = {
-                        $profileCorrect = $true
-                
-                        $currentNetworkProfile = Get-NetConnectionProfile -InterfaceAlias $using:interfaceAlias
-
-                        if($currentNetworkProfile.NetworkCategory -ne $using:networkProfile)
-                        {
-                            $profileCorrect = $false
-                        }
-                                
-                        return $profileCorrect
-                    }
-                }
-            }
-            else
-            {
-                xNetConnectionProfile "$interfaceAlias-$networkProfile"
-                {
-                    InterfaceAlias = $interfaceAlias
-                    NetworkCategory =  $networkProfile
-                    DependsOn = @("[xIPAddress]$interfaceAlias-$ipAddress","[xDNSServerAddress]$interfaceAlias-$dnsAddress")
-                }
-            }
         }
 
         Registry NlaDelayedStart
