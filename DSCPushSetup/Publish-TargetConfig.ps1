@@ -1,12 +1,12 @@
 ﻿param
 (
-    [Parameter(Mandatory)]
+    [Parameter()]
     [pscredential]
     $DeploymentCredential,
 
     [Parameter()]
     [string]
-    $ContentStoreRootPath = "C:\contentstore",
+    $ContentStoreRootPath = "C:\workshop",
 
     [Parameter()]
     [string]
@@ -18,7 +18,7 @@
 
     [Parameter()]
     [string]
-    $ContentStoreDscResourceStorePath = "$ContentStoreRootPath\DSC\Resource",
+    $ContentStoreDscResourceStorePath = "$ContentStoreRootPath\Resources",
 
     [Parameter()]
     [string]
@@ -132,7 +132,7 @@ foreach ($config in $targetConfigs.Configs)
         Write-Output "Copying Content Store to Target: $($config.TargetIP)"
         $copyContentStoreParams = @{
             Path=$ContentStoreRootPath
-            Destination=$config.Variables.LocalSourceStore
+            Destination=$config.Variables.ContentStore
             Target=$config.TargetIP.IPAddressToString
             Credential=$DeploymentCredential
         }

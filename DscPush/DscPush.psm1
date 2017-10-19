@@ -294,12 +294,7 @@ function Export-NodeDefinitionFile
 
     if ($UpdateNodeDefinitionFilePath)
     {
-        if (! (Test-Path $UpdateNodeDefinitionFilePath))
-        {
-            throw "Data file not found."
-        }
-
-        $configsToMerge = . $UpdateNodeDefinitionFilePath
+        $configsToMerge = $NodeDefinition
     }
 
     $crlf = "`r`n"
@@ -340,12 +335,16 @@ function Export-NodeDefinitionFile
             #Looks like WMF5.1 adds a case sensitivity switch to the sort-object cmdlet, which invalidates the following 2 lines below.
             #This format is required due to case sensitivity of -Unique switch (Get-Unique behaves the same)
             #$uniqueParamList = $config.Partials.Parameters.Name.ToLower() | Sort-Object -Unique
-            $uniqueParamList = $PartialCatalog.Where({$_.Name -in $config.RoleList}).Parameters.Name | Sort-Object -Unique
+            $ParamObjList = $PartialCatalog.Where({$_.Name -in $config.RoleList}).Parameters
+
+            $uniqueParamList = $ParamObjList.Name | Sort-Object -Unique
 
             $dataFileContents += "`$$ConfigName.Variables += @{$crlf"
 
             foreach ($parameter in $uniqueParamList)
             {
+                $paramValue = $null
+
                 if ($UpdateNodeDefinitionFilePath)
                 {
                     $paramValue = $mergeConfig.Variables.$parameter
@@ -353,8 +352,15 @@ function Export-NodeDefinitionFile
 
                 if (! $paramValue)
                 {
-                
-                    $paramValue = "ENTER_VALUE_HERE"
+                    #Check for pscredential types and flag them for storage in a secrets file
+                    if ($ParamObjList.where({$_.Name -eq $parameter}).StaticType -contains "System.Management.Automation.PSCredential")
+                    {
+                        $paramValue = "|pscredential|"
+                    }
+                    else
+                    {
+                        $paramValue = "ENTER_VALUE_HERE"
+                    }
                 }
 
                 #See note above about WMF5.1
@@ -379,7 +385,14 @@ function Export-NodeDefinitionFile
 
     try
     {
-        Out-File -FilePath $NodeDefinitionFilePath -InputObject $dataFileContents
+        if ($UpdateNodeDefinitionFilePath)
+        {
+            Out-File -FilePath $UpdateNodeDefinitionFilePath -InputObject $dataFileContents
+        }
+        else
+        {
+            Out-File -FilePath $NodeDefinitionFilePath -InputObject $dataFileContents
+        }
     }
     catch
     {
@@ -419,7 +432,15 @@ function Add-PartialProperties
     $secretsList = ConvertFrom-Json ([string](Get-Content $PartialSecretsPath))
     $storedSecrets = ConvertFrom-Json ([string](Get-Content $StoredSecretsPath))
     [byte[]] $secretsKey = Get-Content $SecretsKeyPath
-    $storedSecrets.ForEach({$_.Password = ConvertTo-SecureString -String $_.Password -Key $secretsKey})
+    $securedSecrets = @(
+        $storedSecrets.ForEach({
+            [hashtable]@{
+                Username = $_.Username
+                Password = ConvertTo-SecureString -String $_.Password -Key $secretsKey
+                Secret = $_.Secret
+            }
+        })
+    )
 
     foreach ($config in $TargetConfigs.Value.Configs)
     {
@@ -429,8 +450,8 @@ function Add-PartialProperties
         $config.Dependencies = $configDependencies.ForEach({@{Partial=$_.Partial;DependsOn=$_.DependsOn}})
 
         #Add partial secrets to the config
-        $definedSecrets = ($secretsList.where({$_.Partial -in $config.RoleList})).Secrets
-        $requiredSecrets = ($storedSecrets.where({$_.Secret -in $definedSecrets}))
+        [array]$definedSecrets = ($secretsList.where({$_.Partial -in $config.RoleList})).Secrets
+        $requiredSecrets = ($securedSecrets.where({$_.Secret -in $definedSecrets}))
         $config.Secrets = $requiredSecrets
     }
 
@@ -480,6 +501,7 @@ function Copy-RemoteContent
     
     #Create CIM & PS Session
     $targetCimSession = New-CimSession -ComputerName $Target -Credential $Credential -ErrorAction Stop
+    $targetPSSession = New-PSSession -ComputerName $Target -Credential $Credential -ErrorAction Stop
 
     #Enable SMB firewall and update GP if SMB test fails
     if (! (Test-NetConnection -ComputerName $Target -CommonTCPPort SMB -InformationLevel Quiet -InformationAction SilentlyContinue))
@@ -487,7 +509,6 @@ function Copy-RemoteContent
         Copy-NetFirewallRule -CimSession $targetCimSession -NewPolicyStore localhost -DisplayName 'File and Printer Sharing (SMB-In)' -ErrorAction Ignore
         Enable-NetFirewallRule -CimSession $targetCimSession -PolicyStore localhost
         
-        $targetPSSession = New-PSSession -ComputerName $Target -Credential $Credential
         Invoke-Command -Session $targetPSSession -ScriptBlock {
             $null = cmd.exe /c gpupdate /force
         }
@@ -497,16 +518,33 @@ function Copy-RemoteContent
     #Enable SMB encryption
     Set-SmbServerConfiguration -CimSession $targetCimSession -EncryptData $true -Confirm:$false
         
-    #Connect to host from target and create PSDrive mapping destination folder
+    #Connect to target and create destination folder
     $destinationUNC = $Destination.Replace(":","$")
-    if (! (Test-Path "\\$Target\$destinationUNC"))
-    {
-        $null = New-Item -Type Directory -Path "\\$Target\$destinationUNC" -ErrorAction Stop
+
+    #Create the destination directory using PSsession because New-Item has issues with passing credentials
+    Invoke-Command -Session $targetPSSession -ScriptBlock {
+        $null = New-Item -Type Directory -Path $using:Destination -ErrorAction Ignore
     }
-    $psDrive = New-PSDrive -Name Y -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential
+
+    #Used for the while loop next
+    $i = 0
+
+    #Create PSDrive mapping destination folder so we can use SMB instead of WinRM
+    while(! (Get-PSDrive -Name Y -PSProvider "filesystem" -ErrorAction Ignore))
+    {
+        $psDrive = New-PSDrive -Name Y -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential
+        sleep 1
+
+        #Throw after 5 seconds
+        $i++
+
+        if ($i -gt 5)
+        {
+            throw "Cannot connect to remote filesystem on Target: $Target"
+        }
+    }
     
     #Create root directory and copy content
-    #$ContentStore = New-Item -Type Directory -Path $Destination -ErrorAction Ignore
     Copy-Item -Path "$Path\*" -Destination Y:\ -Force -Recurse
     Get-ChildItem -Path Y:\ -Recurse -Force | Unblock-File
 
@@ -736,8 +774,17 @@ function Send-Config
         $paramList.Add("TargetName", [string]$TargetConfig.TargetIP)
         $paramList.Add("OutPutPath", "C:\Windows\Temp")
 
-        $partial.Parameters.Name.ForEach({$paramList.Add($_, $TargetConfig.Variables.$_)})
-        
+        $partial.Parameters.Name.ForEach({
+            if ($_ -in $TargetConfig.Secrets.Secret)
+            {
+                $paramList.Add($_, (New-Object System.Management.Automation.PSCredential ($TargetConfig.Secrets.Username, $TargetConfig.Secrets.Password)))
+            }
+            else
+            {
+                $paramList.Add($_, $TargetConfig.Variables.$_)
+            }
+        })
+
         try
         {
             #Compile the partial using the ParamList
@@ -825,17 +872,11 @@ function New-SecretsFile
     #import the partial catalog
     $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath
 
-    #Currently a static list, because none of the parameters are pscredential types - once that change is made, this function can loop through parameter types of pscredential
-    $partialSecrets = $partialCatalog.Name.ForEach(
+    #Find parameter types of pscredential
+    #$partialSecrets = $partialCatalog.Parameters.Where({$_.Attributes.Name -eq "System.Management.Automation.PSCredential"})
+    $partialSecrets = $partialCatalog.ForEach(
     {
-        switch ($_)
-        {
-            Certificate  { [ordered]@{Partial=$_;Secrets=@("DomainPassword","CertPassword")} }
-            DeploymentShare { [ordered]@{Partial=$_;Secrets=@()} }
-            DnsRecord { [ordered]@{Partial=$_;Secrets=@()} }
-            DomainController { [ordered]@{Partial=$_;Secrets=@("DomainPassword")} }
-            OSCore { [ordered]@{Partial=$_;Secrets=@("DomainPassword")} }
-        }
+        [ordered]@{Partial=$_.Name;Secrets=$_.Parameters.Where({$_.StaticType -eq "System.Management.Automation.PSCredential"}).Name}
     })
 
     #Export the file for reference
@@ -917,15 +958,6 @@ function New-NodeDefinitionFile
     #import the template definition file
     $nodeDefinition = Invoke-Command -ScriptBlock $ExecutionContext.InvokeCommand.NewScriptBlock($NodeTemplatePath)
 
-    <#Add Partial Objects to Configs
-    foreach ($config in $nodeDefinition.Configs)
-    {
-        #Add Partial Metadata to the config
-        $targetConfigPartialMetaData = Get-PartialMetaData -TargetConfig $config.RoleList -PartialCatalog $partialCatalog
-        $config.AddPartial($targetConfigPartialMetaData)
-    }
-    #endregion Node Definition#>
-
     Export-NodeDefinitionFile -NodeDefinition $nodeDefinition -NodeDefinitionFilePath $NodeDefinitionFilePath -PartialCatalog $partialCatalog
 }
 
@@ -965,15 +997,7 @@ function Update-NodeDefinitionFile
     #Import existing Node Definition File
     $nodeDefinition = . $NodeDefinitionFilePath
 
-    #Add Partial Objects to Node Definition Configs
-    foreach ($config in $nodeDefinition.Configs)
-    {
-        #Add Partial Metadata to the config
-        $targetConfigPartialMetaData = Get-PartialMetaData -TargetConfig $config.RoleList -PartialCatalog $partialCatalog
-        $config.AddPartial($targetConfigPartialMetaData)
-    }
-
-    Export-NodeDefinitionFile -NodeDefinition $nodeDefinition -NodeDefinitionFilePath $UpdateNodeDefinitionFilePath -UpdateNodeDefinitionFilePath $NodeDefinitionFilePath
+    Export-NodeDefinitionFile -NodeDefinition $nodeDefinition -UpdateNodeDefinitionFilePath $UpdateNodeDefinitionFilePath -PartialCatalog $partialCatalog
 }
 
 #region Class Definitions
@@ -1022,7 +1046,7 @@ Class TargetConfig
     [hashtable[]]
     $Dependencies
 
-    [string[]]
+    [hashtable[]]
     $Secrets
     
     [array]
