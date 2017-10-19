@@ -31,6 +31,10 @@ Param
     [parameter(Mandatory)]
     $NetworkConfig,
 
+    [parameter(Mandatory)]
+    [string]
+    $ContentStore,
+
     [parameter()]
     [string]
     $JoinDomain

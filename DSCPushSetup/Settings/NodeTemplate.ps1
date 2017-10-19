@@ -5,9 +5,9 @@ $adConfig = New-TargetConfig -Properties @{
     TargetIP = "192.0.0.253"
     ContentHost = $false
     RoleList = @(
-        "OSCore"
+        "OsCore"
         "DomainController"
-        "DnsRecord"
+        "HardenWinServer"
     )
     
 }
@@ -18,26 +18,11 @@ $chConfig = New-TargetConfig -Properties @{
     TargetIP = "192.0.0.251"
     ContentHost = $true
     RoleList = @(
-        "OSCore"
-        "Certificate"
-        "DeploymentShare"
+        "OsCore"
+        "HardenWinServer"
     )
 }
 $masterNodeDefinition.AddConfig($chConfig)
 
-$childNodeDefinition = New-Node -Name "Child" -NodeId $(New-Guid).Guid -Type "DscPushChildNode"
-$childNodeDefinition.AddParent($masterNodeDefinition)
-
-$childConfig = New-TargetConfig -Properties @{
-    ConfigName = "DscPushChild"
-    TargetIP = "192.0.0.248"
-    ContentHost = $true
-    RoleList = @(
-        "OSCore"
-        "DeploymentShare"
-    )
-}
-$childNodeDefinition.AddConfig($childConfig)
-
 #DO NOT MODIFY BELOW THIS LINE!
-@($masterNodeDefinition,$childNodeDefinition)
+@($masterNodeDefinition)
