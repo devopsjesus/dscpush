@@ -36,6 +36,7 @@
   - Class-based
   - Partial Parsing Engine 
   - Single Module
+  - Works in Azure
 - Protected parameter values are stored securely
   - Any [PSCredential] type values are securely stored & encrypted with a 256bit AES key
   - Management and service account credentials are not exposed
