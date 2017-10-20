@@ -16,8 +16,8 @@
    - NOTE: The following scripts will replace the **C:\DscPushWorkshop** directory on your host.
 1. Run WorkshopStep1.ps1
 1. Run WorkshopStep2.ps1
-   - Credential pop-up is to store the protected property values (i.e. secrets).  The configs only require a single credential, because the same one is used for both VMs.
-   - Same credential is used for the second credential pop-up, which is requesting credential for domain admin. To keep it simple, this workshop uses the same credential for both cases (local and domain admin).
+   - Credential pop-up is to store the protected property values (i.e. secrets).  The workshop only require a single credential, because the same one is used for both VMs. The credential being stored is for domain admin.
+   - The second credential pop-up is to kick-off the Configuration Deployment.  The same credential is used to keep it simple for both cases (local and domain admin).
 
 # What's going on?
 
