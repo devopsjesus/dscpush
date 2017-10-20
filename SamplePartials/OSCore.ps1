@@ -70,16 +70,7 @@ Configuration OSCore
                 $addressFamily = "IPv4"
             }
 
-            if ($adapterMAC)
-            {
-                $targetAdapter = Invoke-Command -ComputerName $TargetName -ScriptBlock { Get-NetAdapter | Where-Object {$_.MacAddress -eq $using:adapterMAC}} -Credential $DomainCredential -ErrorAction SilentlyContinue
-                $uid = $adapterMAC
-            }
-            else
-            {
-                $targetAdapter = Invoke-Command -ComputerName $TargetName -ScriptBlock { Get-NetIPInterface -InterfaceAlias $using:adapterAlias -AddressFamily $using:addressFamily } -Credential $DomainCredential -ErrorAction SilentlyContinue
-                $uid = $adapterAlias
-            }
+            $targetAdapter = Invoke-Command -ComputerName $TargetName -ScriptBlock { Get-NetAdapter | Select-Object -First 1 <#Where-Object {$_.MacAddress -eq $using:adapterMAC}#>} -Credential $DomainCredential -ErrorAction SilentlyContinue
 
             $interfaceAlias = $null
             $interfaceAlias = $targetAdapter.InterfaceAlias

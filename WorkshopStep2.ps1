@@ -1,10 +1,23 @@
-﻿$WorkshopPath = "C:\DscPushWorkshop"
+﻿#Requires -Version 5.1 -RunAsAdministrator
 
-$SetupFolder = "$WorkshopPath\DscPushSetup"
+param
+(
+    [Parameter()]
+    [string]
+    $WorkshopPath = "C:\DscPushWorkshop",
 
-$SettingsPath = "$WorkshopPath\DscPushSetup\Settings"
+    [Parameter()]
+    [string]
+    $SetupFolder = "$WorkshopPath\DscPushSetup",
 
-$DSCPushModulePath = "$WorkshopPath\Modules\DSCPush"
+    [Parameter()]
+    [string]
+    $SettingsPath = "$WorkshopPath\DscPushSetup\Settings",
+
+    [Parameter()]
+    [string]
+    $DSCPushModulePath = "$WorkshopPath\Modules\DSCPush"
+)
 
 $ProgressPreference = "SilentlyContinue"
 
@@ -20,15 +33,26 @@ $null = New-Item -Path "$SetupFolder\DefinitionStore"-ItemType Directory -Force
 $NodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\workshop.ps1"
 
 $currentDir = (Get-Item .).FullName
-Set-Location $SetupFolder
 
-$partialCatalogPath = .\Initialize-DscPush.ps1 -GeneratePartialCatalog
-$partialCatalog = Import-PartialCatalog $partialCatalogPath[1]
+foreach ($vm in "192.0.0.253","192.0.0.251")
+{
+    try
+    {
+        $null = Test-wsman $vm -ErrorAction Stop
+    }
+    catch
+    {
+        throw "Cannot estable WinRM session to $vm."
+    }
+} 
+
+$partialCatalogPath = . "$SetupFolder\Initialize-DscPush.ps1" -GeneratePartialCatalog
+$partialCatalog = Import-PartialCatalog $partialCatalogPath
 
 Remove-Item -Path $NodeDefinitionFilePath -ErrorAction SilentlyContinue
-.\Initialize-DscPush.ps1 -GenerateNewNodeDefinitionFile -NodeTemplatePath "$SettingsPath\NodeTemplate.ps1" -NodeDefinitionFilePath $NodeDefinitionFilePath
+. "$SetupFolder\Initialize-DscPush.ps1" -GenerateNewNodeDefinitionFile -NodeTemplatePath "$SettingsPath\NodeTemplate.ps1" -NodeDefinitionFilePath $NodeDefinitionFilePath
 
-.\Initialize-DscPush.ps1 -GenerateSecrets
+. "$SetupFolder\Initialize-DscPush.ps1" -GenerateSecrets
 
 #Update the Node Definition File - this would typically be done by hand.
 #This section can be performed manually
@@ -43,7 +67,7 @@ $nodeDefinition.Configs[0].Variables = @{
         "SubnetBitMask":  16,
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
-        "MacAddress":  "00-15-5d-36-E9-10",
+        "Alias":  "Ethernet",
         "IPAddress":  "192.0.0.253",
         "DNSServer":  "192.0.0.253"
     }
@@ -61,7 +85,7 @@ $nodeDefinition.Configs[1].Variables = @{
         "SubnetBitMask":  16,
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
-        "MacAddress":  "00-15-5d-36-E9-11",
+        "Alias":  "Ethernet",
         "IPAddress":  "192.0.0.251",
         "DNSServer":  "192.0.0.253"
     }
@@ -79,6 +103,4 @@ $UpdateNodeDefinitionFileParams = @{
 DSCPush\Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
 #endregion
 
-.\Publish-TargetConfig.ps1 -ForceResourceCopy -SanitizeModulePaths
-
-Set-Location $currentDir
+. "$SetupFolder\Publish-TargetConfig.ps1" -ForceResourceCopy -SanitizeModulePaths

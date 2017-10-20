@@ -196,7 +196,7 @@ workflow ConfigureVM
 		        Set-VMNetworkAdapter -VMName $vmName -Name "Network Adapter" -StaticMacAddress $vmMac
             }
 
-		    Start-VM -Name $vmName -WarningAction Ignore
+		    Start-VM -Name $vmName -WarningAction SilentlyContinue
 
 		    #Remove dashes from MAC address for Set-VmGuestIpAddress function requirements
 		    $vmMac = $vmMac.Replace('-','')
@@ -210,7 +210,7 @@ workflow ConfigureVM
 		    }
 
             $i = 1
-		    while ($AdapterCount -gt $i)
+		    while ($AdapterCount -lt $i)
             {
                 $null = Add-VMNetworkAdapter -VMName $vmName -SwitchName $VSwitchName
                 $i++
@@ -228,7 +228,7 @@ try
         Subnet=$TargetSubnet
         AdapterCount=$AdapterCount
         RemoteCred=$Credential
-        Clobber=$Clobber.IsPresent
+        Clobber=$Clobber
     }
 
     ConfigureVM @vmConfig
