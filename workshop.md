@@ -1,12 +1,13 @@
 # IT/Dev Connections DscPush Workshop
 
 1. Create 2 Windows Server 2016 VMs
-   - Core version works (and is faster to install)
+   - Full Interface or Core version
+   - Server 2012 R2 with WMF5.1 is supported as well
    - IP Addresses
      - 192.0.0.251
      - 192.0.0.253
    - When you can successfully establish Cim & PS Sessions to each VM, you're ready to begin
-     - Example: New-PsSession -ComputerName 192.0.0.253 -Credential administrator
+     - Example: *New-PsSession -ComputerName 192.0.0.253 -Credential administrator*
 1. Download this repository
    - https://github.com/devopsjesus/dscpush/archive/master.zip
    - Extract the Workshop\*.ps1 files to an accessible location (e.g. Desktop)
