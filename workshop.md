@@ -15,9 +15,9 @@
    - Change Directory to the directory containing the extracted Workshop\*.ps1 files
    - NOTE: The following scripts will replace the **C:\DscPushWorkshop** directory on your host.
 1. Run WorkshopStep1.ps1
-   - Credential pop-up is for the VM's local admin (administsrator & the password for VMs' local admin account)
 1. Run WorkshopStep2.ps1
-   - Same credential is used for domain admin, so just keep using the same credential from your image
+   - Credential pop-up is to store the protected property values (i.e. secrets).  The configs only require a single credential, because the same one is used for both VMs.
+   - Same credential is used for the second credential pop-up, which is requesting credential for domain admin. To keep it simple, this workshop uses the same credential for both cases (local and domain admin).
 
 # What's going on?
 
