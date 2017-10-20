@@ -15,3 +15,24 @@
    - The workshop will replace the **C:\workshop** directory on your host!
 1. Run WorkshopStep1.ps1
 1. Run WorkshopStep2.ps1
+
+# What's going on?
+
+- The two VMs are being sent separate compiled mof files derived from compiling multiple DSC Partial Configurations (We're publishing DSC Partial Configurations to the VMs.)
+- One VM is being promoted to a DC
+- The other VM will join the newly-created domain
+- Both VMs will be "hardened"
+
+# Why is this cool?
+
+- DSC Push provides a DSC Configuration Management framework to securely publish Configurations.
+  - The data required to publish the partials lives in a single repository
+  - Hosts can be managed in logical groups ("Nodes")
+  - New Configurations can be scheduled and published at will.
+- 100% PowerShell
+  - Class-based
+  - Partial Parsing Engine 
+  - Single Module
+- Protected parameter values are stored securely
+  - Any [PSCredential] type values are securely stored & encrypted with a 256bit AES key
+  - Management and service account credentials are not exposed
