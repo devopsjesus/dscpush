@@ -11,7 +11,6 @@ param
     $DscPushModulePath = "$env:USERPROFILE\Documents\dscpush-master.zip",
 
     [Parameter()]
-    [ValidateScript({Test-Path $_})]
     [string]
     $WorkshopPath = "C:\DscPushWorkshop",
 
