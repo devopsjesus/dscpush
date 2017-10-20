@@ -14,7 +14,9 @@
    - Change Directory to the directory containing the extracted Workshop\*.ps1 files
    - The workshop will replace the **C:\workshop** directory on your host!
 1. Run WorkshopStep1.ps1
+   - Credential pop-up is for the VM's local admin (administsrator & the password for VMs' local admin account)
 1. Run WorkshopStep2.ps1
+   - Same credential is used for domain admin, so just keep using the same credential from your image
 
 # What's going on?
 
