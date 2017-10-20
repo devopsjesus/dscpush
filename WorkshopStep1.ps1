@@ -1,6 +1,6 @@
 ﻿$GithubDownloadUrl = "https://github.com/devopsjesus/dscpush/archive/master.zip"
 $DscPushModulePath = "$env:USERPROFILE\Downloads\dscpush-master.zip"
-$WorkshopPath = "C:\workshop"
+$WorkshopPath = "C:\DscPushWorkshop"
 $RequiredDscResources = @(
     "xActiveDirectory"
     "xComputerManagement"

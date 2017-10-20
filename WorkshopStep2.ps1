@@ -1,4 +1,4 @@
-﻿$WorkshopPath = "C:\workshop"
+﻿$WorkshopPath = "C:\DscPushWorkshop"
 
 $SetupFolder = "$WorkshopPath\DscPushSetup"
 
