@@ -25,6 +25,11 @@ param(
     )
 )
 
+if (! (Test-Path $VhdPath))
+{
+    throw "Could not find Parent VHDX."
+}
+
 Import-Module Hyper-V
 
 function Set-VmGuestIpAddress

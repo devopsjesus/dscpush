@@ -1,5 +1,75 @@
 ﻿<#
     .SYNOPSIS
+        Returns the parameter block of a PowerShell script.
+
+    .PARAMETER DscConfigurationPath
+        Path to the PowerShell script.
+#>
+function Get-PSScriptParameterMetadata
+{
+    Param
+    (
+        [Parameter(mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [ValidatePattern(".*.ps1$")]
+        [string]
+        $DscConfigurationPath
+    )
+
+    if($(Test-Path -Path $DscConfigurationPath) -eq $false)
+    {
+        Throw "Failed to access $DscConfigurationPath"
+    }
+
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($DscConfigurationPath, [ref]$null, [ref]$null)
+
+    $parameterASTs = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
+    
+    $returnObjs = $parameterASTs.where({$_.Name.VariablePath.UserPath -notin @("TargetName","OutputPath")}) | Select-Object Attributes, Name, StaticType
+
+    $paramCollection = @()
+
+    foreach ($object in $returnObjs)
+    {
+        $paramObj = @{
+            Name = ($object.Name.ToString()).TrimStart("$")
+            StaticType = $object.StaticType.ToString()
+            Attributes = @()
+        }
+
+        foreach ($attribute in $object.Attributes)
+        {
+            $namedArguments = $attribute.NamedArguments
+            $namedArgumentList = @()
+            foreach ($namedArgument in $namedArguments)
+            {
+                $namedArgumentList += $namedArgument.ArgumentName.ToString()
+            }
+
+            $positionalArguments = $attribute.positionalArguments
+            $positionalArgumentList = @()
+            foreach ($positionalArgument in $positionalArguments)
+            {
+                $positionalArgumentList += $positionalArgument.Extent.ToString()
+            }
+            
+            $paramAttributes = New-Object -TypeName psobject -Property @{
+                Name = $attribute.TypeName.ToString()
+                NamedArguments = $namedArgumentList
+                PositionalArguments = $positionalArgumentList
+            }
+            
+            $paramObj.Attributes += $paramAttributes
+        }
+
+        $paramCollection += $paramObj
+    }
+
+    return $paramCollection
+}
+
+<#
+    .SYNOPSIS
         Analyze DSC Configuration for the imported resources.
 
     .PARAMETER DscConfigurationPath
@@ -116,76 +186,6 @@ function Get-DscConfigurationName
 
     # isntance name is the name of the config
     $configurationDefinitionAsts.InstanceName.Value
-}
-
-<#
-    .SYNOPSIS
-        Returns the parameter block of a PowerShell script.
-
-    .PARAMETER DscConfigurationPath
-        Path to the PowerShell script.
-#>
-function Get-PSScriptParameterMetadata
-{
-    Param
-    (
-        [Parameter(mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
-        [ValidatePattern(".*.ps1$")]
-        [string]
-        $DscConfigurationPath
-    )
-
-    if($(Test-Path -Path $DscConfigurationPath) -eq $false)
-    {
-        Throw "Failed to access $DscConfigurationPath"
-    }
-
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($DscConfigurationPath, [ref]$null, [ref]$null)
-
-    $parameterASTs = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
-    
-    $returnObjs = $parameterASTs.where({$_.Name.VariablePath.UserPath -notin @("TargetName","OutputPath")}) | Select-Object Attributes, Name, StaticType
-
-    $paramCollection = @()
-
-    foreach ($object in $returnObjs)
-    {
-        $paramObj = @{
-            Name = ($object.Name.ToString()).TrimStart("$")
-            StaticType = $object.StaticType.ToString()
-            Attributes = @()
-        }
-
-        foreach ($attribute in $object.Attributes)
-        {
-            $namedArguments = $attribute.NamedArguments
-            $namedArgumentList = @()
-            foreach ($namedArgument in $namedArguments)
-            {
-                $namedArgumentList += $namedArgument.ArgumentName.ToString()
-            }
-
-            $positionalArguments = $attribute.positionalArguments
-            $positionalArgumentList = @()
-            foreach ($positionalArgument in $positionalArguments)
-            {
-                $positionalArgumentList += $positionalArgument.Extent.ToString()
-            }
-            
-            $paramAttributes = New-Object -TypeName psobject -Property @{
-                Name = $attribute.TypeName.ToString()
-                NamedArguments = $namedArgumentList
-                PositionalArguments = $positionalArgumentList
-            }
-            
-            $paramObj.Attributes += $paramAttributes
-        }
-
-        $paramCollection += $paramObj
-    }
-
-    return $paramCollection
 }
 
 function Register-DscPartialCatalog
@@ -680,10 +680,7 @@ function Copy-DscResource
             Credential=$DeploymentCredential
         }
         Copy-RemoteContent @copyResourceParams
-        
-        #$null = Copy-Item -Path "$ContentStoreDscResourceStorePath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
     }
-    #$null = Remove-PSSession -Session $session
 }
 
 function Initialize-TargetLcm
@@ -1256,9 +1253,7 @@ class LcmPartialConfiguration
 
     # Constructors
     LcmPartialConfiguration ()
-    {
-        
-    }
+    { }
 }
 
 Enum ConfigurationMode
@@ -1381,14 +1376,6 @@ function New-DscLcm
 
     $newDscLcm = [DscLcm]::new($Properties)
 
-    <#if ($Properties)
-    {
-        foreach ($property in $Properties)
-        {
-            $newDscLcm.$property = $Properties.$property
-        }
-    }#>
-
     return $newDscLcm
 }
 
@@ -1405,7 +1392,7 @@ function New-LcmPartialConfiguration
         $CorePartial,
 
         [parameter()]
-        [string]
+        [TargetConfig]
         $TargetConfig
     )
 
@@ -1423,9 +1410,16 @@ function New-LcmPartialConfiguration
     {
         #...so I had to add the "Where({![string]::IsNullOrEmpty($_)})." nonsense below to remove the empty object - I'm so sorry
         $partialDependsOnProperty = $partialDependenciesList.Where({![string]::IsNullOrEmpty($_)}).ForEach({"[PartialConfiguration]$_"})
-        $newLcmPartial.DependsOn = $($partialDependsOnProperty -join ",")
-    }
 
+        $lcmDependsOnProperty = $null
+        $partialDependsOnProperty.ForEach({[System.Collections.Generic.List[string]]$lcmDependsOnProperty += "$_"})
+
+        $newLcmPartial.DependsOn = $lcmDependsOnProperty
+    }
+    else
+    {
+        
+    }
    
     return $newLcmPartial
 }

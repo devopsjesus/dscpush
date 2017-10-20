@@ -30,8 +30,7 @@ Remove-Item -Path $NodeDefinitionFilePath -ErrorAction SilentlyContinue
 
 .\Initialize-DscPush.ps1 -GenerateSecrets
 
-
-#update the Node Definition file with automation
+#Update the Node Definition File - this would typically be done by hand.
 #This section can be performed manually
 #region Update Node Definition
 $nodeDefinition = . $NodeDefinitionFilePath
@@ -44,7 +43,7 @@ $nodeDefinition.Configs[0].Variables = @{
         "SubnetBitMask":  16,
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
-        "Alias":  "Ethernet",
+        "MacAddress":  "00-15-5d-36-E9-10",
         "IPAddress":  "192.0.0.253",
         "DNSServer":  "192.0.0.253"
     }
@@ -62,7 +61,7 @@ $nodeDefinition.Configs[1].Variables = @{
         "SubnetBitMask":  16,
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
-        "Alias":  "Ethernet",
+        "MacAddress":  "00-15-5d-36-E9-11",
         "IPAddress":  "192.0.0.251",
         "DNSServer":  "192.0.0.253"
     }
