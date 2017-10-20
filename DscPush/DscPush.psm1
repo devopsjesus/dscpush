@@ -795,8 +795,6 @@ function Send-Config
             throw "Failed to publish: $($partial.PartialPath).`r`nActual Error: " + $errormsg
         }
     }
-
-    $null = Start-DscConfiguration -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential -UseExisting -ErrorAction Stop
 }
 
 function ConvertTo-ByteArray {
