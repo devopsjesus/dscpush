@@ -13,7 +13,7 @@
    - Extract the Workshop\*.ps1 files to an accessible location (e.g. Desktop)
 1. Run elevated PowerShell console
    - Change Directory to the directory containing the extracted Workshop\*.ps1 files
-   - The following scripts will replace the **C:\DscPushWorkshop** directory on your host.
+   - NOTE: The following scripts will replace the **C:\DscPushWorkshop** directory on your host.
 1. Run WorkshopStep1.ps1
    - Credential pop-up is for the VM's local admin (administsrator & the password for VMs' local admin account)
 1. Run WorkshopStep2.ps1
