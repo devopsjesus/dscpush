@@ -20,7 +20,7 @@ $null = New-Item -Path "$SetupFolder\DefinitionStore"-ItemType Directory -Force
 $NodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\workshop.ps1"
 
 $currentDir = (Get-Item .).FullName
-cd $SetupFolder
+Set-Location $SetupFolder
 
 $partialCatalogPath = .\Initialize-DscPush.ps1 -GeneratePartialCatalog
 $partialCatalog = Import-PartialCatalog $partialCatalogPath[1]
@@ -72,14 +72,13 @@ $nodeDefinition.Configs[1].Variables = @{
 }
 
 $UpdateNodeDefinitionFileParams = @{
-        ContentStoreRootPath = $ContentStoreRootPath
-        PartialCatalogPath = $PartialCatalogPath
+        PartialCatalog = $partialCatalog
         NodeDefinition = $nodeDefinition
         UpdateNodeDefinitionFilePath = $UpdateNodeDefinitionFilePath
     }
-DSCPush\Export-NodeDefinitionFile -NodeDefinition $nodeDefinition -UpdateNodeDefinitionFilePath "$WorkshopPath\DscPushSetup\DefinitionStore\NodeDefinition.ps1" -PartialCatalog $partialCatalog
+DSCPush\Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
 #endregion
 
 .\Publish-TargetConfig.ps1 -ForceResourceCopy -SanitizeModulePaths
 
-cd $currentDir
+Set-Location $currentDir

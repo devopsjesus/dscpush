@@ -11,10 +11,10 @@ $RequiredDscResources = @(
 $null = New-Item -Path $WorkshopPath -ItemType Directory -Force
 
 $currentDir = (Get-Item .).FullName
-cd $WorkshopPath
+Set-Location $WorkshopPath
 
 #Download DscPush from GitHub and copy to $WorkshopPath
-$dropZip = Invoke-WebRequest -Uri $GithubDownloadUrl -OutFile $DscPushModulePath
+$null = Invoke-WebRequest -Uri $GithubDownloadUrl -OutFile $DscPushModulePath
 Expand-Archive $DscPushModulePath -DestinationPath $WorkshopPath -Force
 Copy-Item -Path "$WorkshopPath\dscpush-master\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force
 
@@ -37,4 +37,4 @@ $RequiredDscResources.ForEach({
     Copy-Item -Path "C:\Program Files\WindowsPowerShell\Modules\$_\*" -Destination "$WorkshopPath\Resources\$_" -Recurse -Force
 })
 
-cd $currentDir
+Set-Location $currentDir

@@ -17,7 +17,7 @@ param(
 
     $TargetSubnet = "255.255.255.0",
 
-    [switch]$Clobber = $true,
+    [switch]$Clobber,
     
     $VmList = @(
         @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-E9-10'; VmMemory = 1024MB }
