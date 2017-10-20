@@ -74,7 +74,7 @@ $nodeDefinition.Configs[1].Variables = @{
 $UpdateNodeDefinitionFileParams = @{
         PartialCatalog = $partialCatalog
         NodeDefinition = $nodeDefinition
-        UpdateNodeDefinitionFilePath = $UpdateNodeDefinitionFilePath
+        UpdateNodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\NodeDefinition.ps1"
     }
 DSCPush\Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
 #endregion
