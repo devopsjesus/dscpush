@@ -6,7 +6,7 @@
 
     [Parameter()]
     [string]
-    $ContentStoreRootPath = "C:\workshop",
+    $ContentStoreRootPath = "C:\DscPushWorkshop",
 
     [Parameter()]
     [string]
