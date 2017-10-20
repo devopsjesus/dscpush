@@ -151,6 +151,16 @@ foreach ($config in $targetConfigs.Configs)
         Copy-DscResource @copyResourceParams
     }
 
+    #Compile and Publish the Configs
+    Write-Output "Deploying Config: $($config.ConfigName) to Target: $($config.TargetIP)"
+    $configParams = @{
+        TargetConfig = $config
+        ContentStoreRootPath = $ContentStoreRootPath
+        DeploymentCredential = $DeploymentCredential
+        PartialCatalog = $PartialCatalog
+    }
+    Send-Config @configParams
+
     #Set the LCM
     Write-Output "Initializing LCM on Target: $($config.TargetIP)"
     $TargetLcmParams = @{
@@ -162,15 +172,7 @@ foreach ($config in $targetConfigs.Configs)
     }
     Initialize-TargetLcm @TargetLcmParams
 
-    #Compile and Publish the Configs
-    Write-Output "Deploying Config: $($config.ConfigName) to Target: $($config.TargetIP)"
-    $configParams = @{
-        TargetConfig = $config
-        ContentStoreRootPath = $ContentStoreRootPath
-        DeploymentCredential = $DeploymentCredential
-        PartialCatalog = $PartialCatalog
-    }
-    Send-Config @configParams
+    $null = Start-DscConfiguration -ComputerName $config.TargetIP.IPAddressToString -Credential $DeploymentCredential -UseExisting -ErrorAction Stop
 }
 
 #Cleanup
