@@ -2,7 +2,7 @@
 
 DscPush is a DSC Configuration management framework. It consists of a module (DscPush directory) and supporting resources (DscPushSetup directory). Copy the module directory to your PowerShell Module Path (e.g. "$env:USERPROFILE\Documents\WindowsPowerShell\Modules"), and copy the DscPushSetup folder to your workspace.
 
-# Backlog
+# DSC Push Backlog
 - [ ] Interface (Coming Soon!)
 - [ ] Scheduling
 - [ ] Parameter Collision Mitigation Enhancement
