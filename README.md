@@ -13,7 +13,7 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
 # Requirements
 
 * DscPush was written on WMF5.1
-* Ability to establish CimSessions to target device.
+* Ability to establish CimSessions/PSSessions to target device.
 
 
 # Concept of Operations
