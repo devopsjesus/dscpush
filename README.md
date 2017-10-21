@@ -4,7 +4,7 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
 
 # DSC Push Backlog
 - [ ] Interface (Coming Soon!)
-- [ ] Scheduling
+- [ ] Automated Scheduling
 - [ ] Parameter Collision Mitigation Enhancement
 - [ ] Scalability (Multithreading)
 - [ ] Plug-in Support
