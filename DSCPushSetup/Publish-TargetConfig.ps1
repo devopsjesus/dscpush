@@ -81,7 +81,9 @@ if (Get-Module DscPush) #if statement is dev necessity that can be removed for p
     Remove-Module DscPush
 }
 
-Import-Module -FullyQualifiedName $DSCPushModulePath
+Import-Module -FullyQualifiedName $DSCPushModulePath -ErrorAction Stop
+
+Import-Module PoshRSJob #Multithreading
 #endregion Modules
 
 #Import the partial catalog
@@ -115,65 +117,79 @@ $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 #Deploy Configs
 foreach ($config in $targetConfigs.Configs)
 {
+    #Multithreading using RunspacePools (PoshRSJob Module)
+    Start-RSJob -Name {$config.ConfigName} -ScriptBlock {
 
-    #Try to reach the target first. might need to mature this into function as we add non-windows devices
-    try
-    {
-        $null = Test-WSMan $config.TargetIP -ErrorAction Stop
-    }
-    catch
-    {
-        Write-Warning "Could not reach target $($config.TargetIP). Skipping target..."
-        continue
-    }
+        $config = $using:config
 
-    if ($config.ContentHost -and $CopyContentStore.IsPresent)
-    {
-        Write-Output "Copying Content Store to Target: $($config.TargetIP)"
-        $copyContentStoreParams = @{
-            Path=$ContentStoreRootPath
-            Destination=$config.Variables.ContentStore
-            Target=$config.TargetIP.IPAddressToString
-            Credential=$DeploymentCredential
+        #Try to reach the target first (might need to mature this into function as we add non-windows devices)
+        try
+        {
+            $null = Test-WSMan $config.TargetIP -ErrorAction Stop
         }
-        Copy-RemoteContent @copyContentStoreParams
-    }
+        catch
+        {
+            Write-Warning "Could not reach target $($config.TargetIP). Skipping target..."
+            continue
+        }
 
-    if ($ForceResourceCopy.IsPresent)
-    {
-        Write-Output "Copying required DSC Resources to Target: $($config.TargetIP)"
-        $copyResourceParams = @{
+        if ($config.ContentHost -and $using:CopyContentStore)
+        {
+            Write-Output "Copying Content Store to Target: $($config.TargetIP)"
+            $copyContentStoreParams = @{
+                Path=$using:ContentStoreRootPath
+                Destination=$config.Variables.ContentStore
+                Target=$config.TargetIP.IPAddressToString
+                Credential=$using:DeploymentCredential
+            }
+            Copy-RemoteContent @copyContentStoreParams
+        }
+
+        if ($ForceResourceCopy.IsPresent)
+        {
+            Write-Output "Copying required DSC Resources to Target: $($config.TargetIP)"
+            $copyResourceParams = @{
+                TargetConfig = $config
+                ContentStoreDscResourceStorePath = $using:ContentStoreDscResourceStorePath
+                DeploymentCredential = $using:DeploymentCredential
+                PartialCatalog = $using:partialCatalog
+            }
+            Copy-DscResource @copyResourceParams
+        }
+
+        #Compile and Publish the Configs
+        Write-Output "Deploying Config: $($config.ConfigName) to Target: $($config.TargetIP)"
+        $configParams = @{
             TargetConfig = $config
-            ContentStoreDscResourceStorePath = $ContentStoreDscResourceStorePath
-            DeploymentCredential = $DeploymentCredential
-            PartialCatalog = $partialCatalog
+            ContentStoreRootPath = $using:ContentStoreRootPath
+            DeploymentCredential = $using:DeploymentCredential
+            PartialCatalog = $using:PartialCatalog
         }
-        Copy-DscResource @copyResourceParams
-    }
+        Send-Config @configParams -WarningAction SilentlyContinue
 
-    #Compile and Publish the Configs
-    Write-Output "Deploying Config: $($config.ConfigName) to Target: $($config.TargetIP)"
-    $configParams = @{
-        TargetConfig = $config
-        ContentStoreRootPath = $ContentStoreRootPath
-        DeploymentCredential = $DeploymentCredential
-        PartialCatalog = $PartialCatalog
-    }
-    Send-Config @configParams
+        #Set the LCM
+        Write-Output "Initializing LCM on Target: $($config.TargetIP)"
+        $TargetLcmParams = @{
+            TargetLcmSettings = $using:TargetLcmSettings
+            TargetConfig = $using:config
+            CorePartial = $using:corePartial
+            Credential = $using:DeploymentCredential
+            MofOutputPath = $using:mofOutputPath
+        }
+        Initialize-TargetLcm @TargetLcmParams -WarningAction SilentlyContinue
 
-    #Set the LCM
-    Write-Output "Initializing LCM on Target: $($config.TargetIP)"
-    $TargetLcmParams = @{
-        TargetLcmSettings = $TargetLcmSettings
-        TargetConfig = $config
-        CorePartial = $corePartial
-        Credential = $DeploymentCredential
-        MofOutputPath = $mofOutputPath
-    }
-    Initialize-TargetLcm @TargetLcmParams
+        $null = Start-DscConfiguration -ComputerName $config.TargetIP.IPAddressToString -Credential $using:DeploymentCredential -UseExisting -ErrorAction Stop
 
-    $null = Start-DscConfiguration -ComputerName $config.TargetIP.IPAddressToString -Credential $DeploymentCredential -UseExisting -ErrorAction Stop
+    } -ModulesToImport $DSCPushModulePath
 }
+
+#region RsJobs
+$rsJobs = Get-RSjob
+$rsJobs | Receive-RSJob
+$rsJobs | Wait-RSJob -Timeout 600
+$rsJobs | Receive-RSJob
+$rsJobs | Remove-RSJob
+#endregion
 
 #Cleanup
 Set-Item -Path WSMan:\localhost\Client\TrustedHosts -Value $currentTrustedHost -Force
