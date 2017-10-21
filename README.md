@@ -18,13 +18,23 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
 
 # Concept of Operations
 
-## Workspace Directory Structure
+## Recommended Workspace Directory Structure
 
 - C:\workspace
-  - DSCPush
+  - Modules (put other required modules here)
+    - DSCPush
+      - DscPush.psd1
+      - DscPush.psm1
   - DSCPushSetup
+    - DefinitionStore (put your Node Definition Files here)
+      - [NodeDefinition.ps1]
+    - Settings
+      - NodeTemplate.ps1
+      - PartialDependencies.json
   - Partials
+    - [Partial Configurations here]
   - Resources
+    - [Required DSC Resourfces here]
 
 
 ## Process Flow
