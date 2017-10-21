@@ -34,12 +34,12 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
   - Partials
     - [Partial Configurations here]
   - Resources
-    - [Required DSC Resourfces here]
+    - [Required DSC Resources here]
 
 
 ## Process Flow
 
-1. Generate your Partial Catalog 
+1. Generate your Partial Configuration Catalog 
    - Run $\DscPushSetup\Initialize-DscPush.ps1 -GeneratePartialCatalog
 2. Populate Node Template File ($\DscPushSetup\Settings\NodeTemplate.ps1)
    - Edit Node and Config properties to match infrastructure
@@ -61,10 +61,11 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
        - Node Definition File Path (Generated in Step 3 and modified in Step 4)
      - Outputs
        - Securely Stored Secrets File (e.g. $\DscPushSetup\Settings\StoredSecrets.ps1)
-       - Secrets Key File - 256 bit AES Key (e.g. $\DscPushSetup\Settings\SecretsKey.json)
+       - Secrets Key File - 256-bit AES Key (e.g. $\DscPushSetup\Settings\SecretsKey.json)
 5. Edit Node Definition File
    - Replace all instances of “ENTER_VALUE_HERE” with appropriate target config values.
-6. Run $\DscPushSetup\Publish-RpsConfiguration.ps1
+6. Publish the Node Definitions (Configs with values stored in Node Definition File)
+   - Run $\DscPushSetup\Publish-RpsConfiguration.ps1
 
 
 # Lexicon
