@@ -71,8 +71,3 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
 | **Dependency** | Partial Dependencies (LCM Property) |
 | **Secret** | Any protected property of a Config (e.g. Credential, Cert Password) |
 | **Content Store** | The publishing directory that supports the Configs being published. |
-
-
-# Architecture
-
-![DscPush Architecture](https://github.com/devopsjesus/dscpush/blob/master/architecture.png)
