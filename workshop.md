@@ -14,8 +14,8 @@
 1. Run elevated PowerShell console
    - Change Directory to the directory containing the extracted Workshop\*.ps1 files
    - NOTE: The following scripts will replace the **C:\DscPushWorkshop** directory on your host.
-1. Run WorkshopStep1.ps1
-1. Run WorkshopStep2.ps1
+1. Run WorkshopStep1.ps1 on your workstation.  It is possible to run on one of the target VMs, but you run the risk of the VM rebooting while it's still compiling Partial configurations.
+1. Run WorkshopStep2.ps1 on your workstation.
    - Credential pop-up is to store the protected property values (i.e. secrets).  The workshop only require a single credential, because the same one is used for both VMs. The credential being stored is for domain admin.
    - The second credential pop-up is to kick-off the Configuration Deployment.  The same credential is used to keep it simple for both cases (local and domain admin).
 
