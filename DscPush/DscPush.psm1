@@ -670,7 +670,7 @@ function Copy-DscResource
     #Retrive unique list of required DSC Resources
     $targetResources = ($targetPartials.Resources.Where({!([string]::IsNullOrEmpty($_))}).Split(",")) | Select-Object -Unique
 
-    #$session = New-PSSession -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential
+    $session = New-PSSession -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential
     foreach ($resource in $targetResources)
     {
         $copyResourceParams = @{
@@ -679,8 +679,11 @@ function Copy-DscResource
             Target=$TargetConfig.TargetIP
             Credential=$DeploymentCredential
         }
-        Copy-RemoteContent @copyResourceParams
+        #Copy-RemoteContent @copyResourceParams
+        
+        $null = Copy-Item -Path "$ContentStoreDscResourceStorePath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
     }
+    $null = Remove-PSSession -Session $session
 }
 
 function Initialize-TargetLcm
