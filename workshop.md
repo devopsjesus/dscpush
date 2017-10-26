@@ -8,6 +8,7 @@
      - 192.0.0.253
    - When you can successfully establish Cim & PS Sessions to each VM, you're ready to begin
      - Example: *New-PsSession -ComputerName 192.0.0.253 -Credential administrator*
+     - TIP: Run *Enable-PSRemoting* on the targets to quickly enable remote management
 1. Download this repository
    - https://github.com/devopsjesus/dscpush/archive/master.zip
    - Extract the Workshop\*.ps1 files to an accessible location (e.g. Desktop)
