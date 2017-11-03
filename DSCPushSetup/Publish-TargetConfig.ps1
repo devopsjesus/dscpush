@@ -6,7 +6,7 @@
 
     [Parameter()]
     [string]
-    $ContentStoreRootPath = "C:\ContentStore",
+    $ContentStoreRootPath = "C:\DscPushWorkshop",
 
     [Parameter()]
     [string]
@@ -18,7 +18,7 @@
 
     [Parameter()]
     [string]
-    $ContentStoreDscResourceStorePath = "$ContentStoreRootPath\DSC\Resource",
+    $ContentStoreDscResourceStorePath = "$ContentStoreRootPath\Resources",
 
     [Parameter()]
     [string]
