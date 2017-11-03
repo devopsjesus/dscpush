@@ -6,7 +6,7 @@
 
     [Parameter()]
     [string]
-    $ContentStoreRootPath = "C:\DscPushWorkshop",
+    $ContentStoreRootPath = "C:\ContentStore",
 
     [Parameter()]
     [string]
@@ -18,7 +18,7 @@
 
     [Parameter()]
     [string]
-    $ContentStoreDscResourceStorePath = "$ContentStoreRootPath\Resources",
+    $ContentStoreDscResourceStorePath = "$ContentStoreRootPath\DSC\Resource",
 
     [Parameter()]
     [string]
@@ -50,12 +50,12 @@
 
     [Parameter()]
     $TargetLcmSettings = @{
-        ConfigurationModeFrequencyMins = "15"
+        ConfigurationModeFrequencyMins = 15
         RebootNodeIfNeeded             = $True
         ConfigurationMode              = "ApplyAndAutoCorrect"
         ActionAfterReboot              = "ContinueConfiguration"
         RefreshMode                    = "Push"
-        AllowModuleOverwrite           = $False
+        AllowModuleOverwrite           = $true
         DebugMode                      = "None"
     },
     
@@ -81,7 +81,7 @@ if (Get-Module DscPush) #if statement is dev necessity that can be removed for p
     Remove-Module DscPush
 }
 
-Import-Module -FullyQualifiedName $DSCPushModulePath
+Import-Module -FullyQualifiedName $DSCPushModulePath -ErrorAction Stop
 #endregion Modules
 
 #Import the partial catalog
@@ -113,7 +113,7 @@ $initializeParams = @{
 $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
 #Deploy Configs
-foreach ($config in $targetConfigs.Configs)
+foreach ($config in $targetConfigs.Configs)#.where({$_.configname -eq 'RpsSMA'}))
 {
 
     #Try to reach the target first. might need to mature this into function as we add non-windows devices
@@ -132,7 +132,7 @@ foreach ($config in $targetConfigs.Configs)
         Write-Output "Copying Content Store to Target: $($config.TargetIP)"
         $copyContentStoreParams = @{
             Path=$ContentStoreRootPath
-            Destination=$config.Variables.ContentStore
+            Destination=$config.Variables.LocalSourceStore
             Target=$config.TargetIP.IPAddressToString
             Credential=$DeploymentCredential
         }
@@ -150,17 +150,7 @@ foreach ($config in $targetConfigs.Configs)
         }
         Copy-DscResource @copyResourceParams
     }
-
-    #Compile and Publish the Configs
-    Write-Output "Deploying Config: $($config.ConfigName) to Target: $($config.TargetIP)"
-    $configParams = @{
-        TargetConfig = $config
-        ContentStoreRootPath = $ContentStoreRootPath
-        DeploymentCredential = $DeploymentCredential
-        PartialCatalog = $PartialCatalog
-    }
-    Send-Config @configParams
-
+    
     #Set the LCM
     Write-Output "Initializing LCM on Target: $($config.TargetIP)"
     $TargetLcmParams = @{
@@ -172,7 +162,19 @@ foreach ($config in $targetConfigs.Configs)
     }
     Initialize-TargetLcm @TargetLcmParams
 
-    $null = Start-DscConfiguration -ComputerName $config.TargetIP.IPAddressToString -Credential $DeploymentCredential -UseExisting -ErrorAction Stop
+    #Compile and Publish the Configs
+    Write-Output "Deploying Config: $($config.ConfigName) to Target: $($config.TargetIP)"
+    $configParams = @{
+        TargetConfig = $config
+        ContentStoreRootPath = $ContentStoreRootPath
+        DeploymentCredential = $DeploymentCredential
+        PartialCatalog = $PartialCatalog
+        MofOutputPath = $mofOutputPath
+    }
+    Send-Config @configParams
+
+    #This cmdlet now breaks baremetal deployment
+    #Start-DscConfiguration -ComputerName $config.TargetIP.IPAddressToString -Credential $DeploymentCredential -UseExisting
 }
 
 #Cleanup

@@ -525,27 +525,38 @@ function Copy-RemoteContent
         $null = New-Item -Type Directory -Path $using:Destination -ErrorAction Ignore
     }
 
-    #Used for the while loop next
-    $i = 0
-
-    #Create PSDrive mapping destination folder so we can use SMB instead of WinRM
-    while(! (Get-PSDrive -Name Y -PSProvider "filesystem" -ErrorAction Ignore))
+    #determine drive letter
+    $driveMounted = $false
+    for ($i = 69; $i -lt 91 ; $i++)
     {
-        $psDrive = New-PSDrive -Name Y -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential -ErrorAction Ignore
-        sleep 1
+        #assign drive name by unicode
+        $driveName = [char]$i
 
-        #Throw after 5 seconds
-        $i++
-
-        if ($i -gt 5)
+        try
         {
-            throw "Cannot connect to remote filesystem on Target: $Target"
+            $psDrive = New-PSDrive -Name $driveName -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential -ErrorAction Stop
+            Start-Sleep -Seconds 1
+
+            if (Get-PSDrive -Name $driveName)
+            {
+                $driveMounted = $true
+                break
+            }
+        }
+        catch
+        {
+            $driveMounted = $false
         }
     }
-    
+
+    if (! $driveMounted)
+    {
+        throw "Could not mount drive"
+    }
+
     #Create root directory and copy content
-    Copy-Item -Path "$Path\*" -Destination Y:\ -Force -Recurse
-    Get-ChildItem -Path Y:\ -Recurse -Force | Unblock-File
+    Copy-Item -Path "$Path\*" -Destination "${driveName}:\" -Force -Recurse
+    Get-ChildItem -Path "${driveName}:\" -Recurse -Force | Unblock-File
 
     #Cleanup
     Remove-PSDrive -Name $psDrive -ErrorAction Ignore
@@ -609,10 +620,15 @@ function Initialize-DeploymentEnvironment
     #Unblock the content store
     Get-ChildItem $ContentStoreRootPath -Recurse | Unblock-File
 
-    #Required modules will be copied to the logged in user's documents folder
-    $moduleDestPath = $env:PSModulePath.Split(";")[0]
+    #Required modules will be copied to the C:\Program Files\WindowsPowerShell\Modules  #logged in user's documents folder
+    $moduleDestPath = $env:PSModulePath.Split(";")[1]
     
     #Copy Modules to host's module path
+    if (!(Test-Path $moduleDestPath))
+    {
+        New-Item -Path $moduleDestPath -ItemType Directory
+    }
+
     Copy-Item -Path "$ContentStoreModulePath\*" -Destination $moduleDestPath -Recurse -Force -ErrorAction Stop
 
     #Copy DSC Resources to the host's module path
@@ -670,7 +686,7 @@ function Copy-DscResource
     #Retrive unique list of required DSC Resources
     $targetResources = ($targetPartials.Resources.Where({!([string]::IsNullOrEmpty($_))}).Split(",")) | Select-Object -Unique
 
-    $session = New-PSSession -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential
+    #$session = New-PSSession -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential
     foreach ($resource in $targetResources)
     {
         $copyResourceParams = @{
@@ -679,11 +695,12 @@ function Copy-DscResource
             Target=$TargetConfig.TargetIP
             Credential=$DeploymentCredential
         }
-        #Copy-RemoteContent @copyResourceParams
+
+        Copy-RemoteContent @copyResourceParams
         
-        $null = Copy-Item -Path "$ContentStoreDscResourceStorePath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
+        #$null = Copy-Item -Path "$ContentStoreDscResourceStorePath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
     }
-    $null = Remove-PSSession -Session $session
+    #$null = Remove-PSSession -Session $session
 }
 
 function Initialize-TargetLcm
@@ -711,11 +728,16 @@ function Initialize-TargetLcm
         $MofOutputPath
     )
 
+    $targetIP = $TargetConfig.TargetIP.IPAddressToString
+
+    #Create CIM & PS Session
+    $targetCimSession = New-CimSession -ComputerName $targetIP -Credential $Credential -ErrorAction Stop
+
     # build local config
     [DSCLocalConfigurationManager()]
     Configuration TargetConfiguration
     {
-        Node $TargetConfig.TargetIP.IPAddressToString
+        Node $targetIP
         {            
             Settings
             {                              
@@ -741,7 +763,9 @@ function Initialize-TargetLcm
 
     $null = TargetConfiguration -OutputPath $mofOutputPath -ErrorAction Stop
     
-    $null = Set-DscLocalConfigurationManager -ComputerName $TargetConfig.TargetIP -Path $mofOutputPath -Credential $Credential -Force -ErrorAction Stop
+    $null = Set-DscLocalConfigurationManager -CimSession $targetCimSession -Path $mofOutputPath -ErrorAction Stop
+
+    Remove-CimSession -CimSession $targetCimSession
 }
 
 function Send-Config
@@ -761,8 +785,17 @@ function Send-Config
 
         [Parameter()]
         [DscPartial[]]
-        $PartialCatalog
+        $PartialCatalog,
+
+        [parameter()]
+        [string]
+        $MofOutputPath
     )
+
+    $targetIP = $TargetConfig.TargetIP.IPAddressToString
+
+    #Create CIM & PS Session
+    $targetCimSession = New-CimSession -ComputerName $targetIP -Credential $DeploymentCredential -ErrorAction Stop
 
     $targetPartials = $PartialCatalog.where({$_.Name -in $TargetConfig.RoleList})
     
@@ -771,8 +804,8 @@ function Send-Config
         Write-Output "  Compiling Partial: $($partial.Name)"
 
         $paramList = @{}
-        $paramList.Add("TargetName", [string]$TargetConfig.TargetIP)
-        $paramList.Add("OutPutPath", "C:\Windows\Temp")
+        $paramList.Add("TargetName", $targetIP)
+        $paramList.Add("OutPutPath", $MofOutputPath)
 
         $partial.Parameters.Name.ForEach({
             if ($_ -in $TargetConfig.Secrets.Secret)
@@ -789,15 +822,22 @@ function Send-Config
         {
             #Compile the partial using the ParamList
             . "$($partial.Path)" @paramList
-            
-            $null = Publish-DscConfiguration -Path "C:\Windows\Temp" -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential -Force -ErrorAction Stop
         }
         catch
         {
             $errormsg = $_.Exception.Message
             throw "Failed to publish: $($partial.PartialPath).`r`nActual Error: " + $errormsg
         }
+
+        while (($null = Get-DscLocalConfigurationManager -CimSession $targetCimSession).LCMState -eq "Busy")
+        {
+            Start-Sleep 1
+        }
+
+        $null = Publish-DscConfiguration -CimSession $targetCimSession -Path $MofOutputPath -ErrorAction Stop
     }
+
+    Remove-CimSession -CimSession $targetCimSession
 }
 
 function ConvertTo-ByteArray {
