@@ -317,6 +317,10 @@ function Export-NodeDefinitionFile
             $configName = $config.ConfigName
             $TargetIP = $config.TargetIP
             $ContentHost = $config.ContentHost
+            if ($ContentHost)
+            {
+                $ContentStorePath = $config.ContentStorePath
+            }
             $roleList = ($config.RoleList) -join "`"$crlf        `""
             $roleList = "$roleList"
             
@@ -328,6 +332,12 @@ function Export-NodeDefinitionFile
             $dataFileContents += "    ConfigName = '$configName'$crlf"
             $dataFileContents += "    TargetIP = '$TargetIP'$crlf"
             $dataFileContents += "    ContentHost = `$$ContentHost$crlf"
+            
+            if ($ContentHost)
+            {
+                $dataFileContents += "    ContentStorePath = '$ContentStorePath'$crlf"
+            }
+            
             $dataFileContents += "    RoleList = @($crlf        `"$roleList`"$crlf    )$crlf"
             $dataFileContents += "}$crlf"
 
@@ -1081,6 +1091,9 @@ Class TargetConfig
     [boolean]
     $ContentHost
 
+    [string]
+    $ContentStorePath
+
     [hashtable[]]
     $Dependencies
 
@@ -1098,12 +1111,13 @@ Class TargetConfig
         $this.Properties = ($this | Get-Member -MemberType Properties).Name
     }
 
-    TargetConfig ( [string] $ConfigName, [ipaddress] $TargetIP, [array] $RoleList, [string] $CopyContentStore, [hashtable[]] $Dependencies, [string[]]$Secrets )
+    TargetConfig ( [string] $ConfigName, [ipaddress] $TargetIP, [array] $RoleList, [string] $ContentHost, [string] $ContentStorePath, [hashtable[]] $Dependencies, [string[]]$Secrets )
     {
         $this.ConfigName = $ConfigName
         $this.TargetIP = $TargetIP
         $this.RoleList = $RoleList -split ','
-        $this.CopyContentStore = $CopyContentStore
+        $this.ContentHost = $ContentHost
+        $this.ContentStorePath = $ContentStorePath
         $this.Dependencies = $Dependencies
         $this.Secrets = $Secrets
         $this.Properties = ($this | Get-Member -MemberType Properties).Name

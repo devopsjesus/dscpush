@@ -61,15 +61,15 @@
     
     [Parameter()]
     [switch]
-    $SanitizeModulePaths,
+    $SanitizeModulePaths = $true,
 
     [Parameter()]
     [switch]
-    $CopyContentStore,
+    $CopyContentStore = $true,
 
     [Parameter()]
     [switch]
-    $ForceResourceCopy
+    $ForceResourceCopy = $true
 )
 #Hide Progress Bars
 $progressPrefSetting = $ProgressPreference
@@ -88,7 +88,14 @@ Import-Module -FullyQualifiedName $DSCPushModulePath -ErrorAction Stop
 $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
 
 #Import the Node Definition file
-$targetConfigs = . $NodeDefinitionFilePath
+if (Test-Path $NodeDefinitionFilePath)
+{
+    $targetConfigs = . $NodeDefinitionFilePath
+}
+else
+{
+    throw "Node Definition file ($NodeDefinitionFilePath) not found"
+}
 
 #Add dependencies and secrets to the Configs
 $partialProperties = @{
@@ -113,7 +120,7 @@ $initializeParams = @{
 $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
 #Deploy Configs
-foreach ($config in $targetConfigs.Configs)#.where({$_.configname -eq 'RpsSMA'}))
+foreach ($config in $targetConfigs.Configs)
 {
 
     #Try to reach the target first. might need to mature this into function as we add non-windows devices
@@ -132,7 +139,7 @@ foreach ($config in $targetConfigs.Configs)#.where({$_.configname -eq 'RpsSMA'})
         Write-Output "Copying Content Store to Target: $($config.TargetIP)"
         $copyContentStoreParams = @{
             Path=$ContentStoreRootPath
-            Destination=$config.Variables.LocalSourceStore
+            Destination=$config.ContentStorePath
             Target=$config.TargetIP.IPAddressToString
             Credential=$DeploymentCredential
         }
