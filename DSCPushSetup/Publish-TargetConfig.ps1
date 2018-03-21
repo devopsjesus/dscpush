@@ -46,7 +46,7 @@
 
     [Parameter()]
     [string]
-    $mofOutputPath = "C:\Windows\Temp",
+    $mofOutputPath = "$ContentStoreRootPath\DSCPushSetup\Settings\mofStore",
 
     [Parameter()]
     $TargetLcmSettings = @{
@@ -58,18 +58,47 @@
         AllowModuleOverwrite           = $true
         DebugMode                      = "None"
     },
+
+    [Parameter(ParameterSetName = 'LcmEncryption')]
+    [string]
+    $TargetCertDirName,
+
+    [Parameter(ParameterSetName = 'LcmEncryption')]
+    [ValidatePattern("[a-f0-9]{40}")]
+    [string]
+    $LcmEncryptionCertThumbprint,
+
+    [Parameter(ParameterSetName = 'LcmEncryption')]
+    [string]
+    $LcmEncryptionCertPath,
+
+    [Parameter(ParameterSetName = 'LcmEncryption')]
+    [string]
+    $LcmEncryptionPKPath,
+
+    [Parameter(ParameterSetName = 'LcmEncryption')]
+    [securestring]
+    $LcmEncryptionPKPassword,
+
+    [Parameter(ParameterSetName = 'LcmEncryption')]
+    [switch]
+    $EnableTargetLcmEncryption,
+
+    [Parameter()]
+    [switch]
+    $CompilePartials,
     
     [Parameter()]
     [switch]
-    $SanitizeModulePaths = $true,
+    $SanitizeModulePaths,
 
     [Parameter()]
     [switch]
-    $CopyContentStore = $true,
+    $CopyContentStore,
 
     [Parameter()]
     [switch]
-    $ForceResourceCopy = $true
+    $ForceResourceCopy
 )
 #Hide Progress Bars
 $progressPrefSetting = $ProgressPreference
@@ -88,14 +117,7 @@ Import-Module -FullyQualifiedName $DSCPushModulePath -ErrorAction Stop
 $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
 
 #Import the Node Definition file
-if (Test-Path $NodeDefinitionFilePath)
-{
-    $targetConfigs = . $NodeDefinitionFilePath
-}
-else
-{
-    throw "Node Definition file ($NodeDefinitionFilePath) not found"
-}
+$targetConfigs = . $NodeDefinitionFilePath
 
 #Add dependencies and secrets to the Configs
 $partialProperties = @{
@@ -112,57 +134,93 @@ $initializeParams = @{
     ContentStoreRootPath = $ContentStoreRootPath
     ContentStoreModulePath = $ContentStoreModulePath
     ContentStoreDscResourceStorePath = $ContentStoreDscResourceStorePath
-    TargetIPList = $targetConfigs.Configs.TargetIP.IPAddressToString
+    TargetIPList = $targetConfigs.Configs.TargetAdapter.NetworkAddress.IPAddressToString
     DeploymentCredential = $DeploymentCredential
     SanitizeModulePaths = $SanitizeModulePaths.IsPresent
-
 }
 $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
 #Deploy Configs
 foreach ($config in $targetConfigs.Configs)
 {
+    Write-Output "Preparing Config: $($config.ConfigName)"
 
-    #Try to reach the target first. might need to mature this into function as we add non-windows devices
-    try
+    Write-Verbose "  Testing Connection to Target Adapter (Target IP: $($config.TargetAdapter.NetworkAddress))"
+    $targetIp = $config.TargetAdapter.NetworkAddress.IpAddressToString
+    $sessions = Connect-TargetAdapter -TargetIpAddress $targetIp -TargetAdapter $config.TargetAdapter -Credential $DeploymentCredential
+    if ($sessions -eq $false)
     {
-        $null = Test-WSMan $config.TargetIP -ErrorAction Stop
-    }
-    catch
-    {
-        Write-Warning "Could not reach target $($config.TargetIP). Skipping target..."
-        continue
+        continue #skip the rest of the config if we can't connect
     }
 
+    if ($CompilePartials.IsPresent)
+    {
+        Write-Output "  Compiling and writing Config to directory: $mofOutputPath"
+        $configParams = @{
+            TargetConfig = $config
+            ContentStoreRootPath = $ContentStoreRootPath
+            DeploymentCredential = $DeploymentCredential
+            PartialCatalog = $PartialCatalog
+            MofOutputPath = $mofOutputPath
+        }
+        Write-Config @configParams
+    }
+
+    $fileCopyList = @()
     if ($config.ContentHost -and $CopyContentStore.IsPresent)
     {
-        Write-Output "Copying Content Store to Target: $($config.TargetIP)"
-        $copyContentStoreParams = @{
+        Write-Output "  Preparing Content Store for remote copy"
+        $fileCopyList += @{
             Path=$ContentStoreRootPath
-            Destination=$config.ContentStorePath
-            Target=$config.TargetIP.IPAddressToString
-            Credential=$DeploymentCredential
+            Destination=$config.Variables.LocalSourceStore
         }
-        Copy-RemoteContent @copyContentStoreParams
     }
 
     if ($ForceResourceCopy.IsPresent)
     {
-        Write-Output "Copying required DSC Resources to Target: $($config.TargetIP)"
+        Write-Output "  Preparing required DSC Resources for remote copy"
         $copyResourceParams = @{
             TargetConfig = $config
             ContentStoreDscResourceStorePath = $ContentStoreDscResourceStorePath
             DeploymentCredential = $DeploymentCredential
             PartialCatalog = $partialCatalog
         }
-        Copy-DscResource @copyResourceParams
+        $fileCopyList += Select-DscResource @copyResourceParams
     }
-    
+
+    if ($fileCopyList)
+    {
+        Write-Output "  Commencing remote copy of required file resources."
+        $contentCopyParams = @{
+            CopyList = $fileCopyList
+            TargetCimSession = $sessions.TargetCimSession
+            TargetPsSession = $sessions.TargetPsSession
+            Credential = $DeploymentCredential
+        }
+        Copy-RemoteContent @contentCopyParams
+    }
+
+    if ($EnableTargetLcmEncryption)
+    {
+        Write-Output "  Enabling LCM Encryption"
+        $targetLcmEncryptionParams = @{
+            LcmEncryptionCertThumbprint = $LcmEncryptionCertThumbprint
+            CertPassword = $LcmEncryptionPKPassword
+            TargetCertPath = "$($config.Variables.LocalSourceStore)\$TargetCertDirName"
+            LcmEncryptionPKPath = $LcmEncryptionPKPath
+            TargetPSSession = $sessions.TargetPSSession
+        }
+        Enable-TargetLcmEncryption @targetLcmEncryptionParams
+
+        $TargetLcmParams = @{ LcmEncryptionCertThumbprint = $LcmEncryptionCertThumbprint }
+    }
+
     #Set the LCM
-    Write-Output "Initializing LCM on Target: $($config.TargetIP)"
-    $TargetLcmParams = @{
+    Write-Output "Initializing LCM Settings"
+    $TargetLcmParams += @{
         TargetLcmSettings = $TargetLcmSettings
         TargetConfig = $config
+        TargetCimSession = $sessions.targetCimSession
         CorePartial = $corePartial
         Credential = $DeploymentCredential
         MofOutputPath = $mofOutputPath
@@ -170,9 +228,10 @@ foreach ($config in $targetConfigs.Configs)
     Initialize-TargetLcm @TargetLcmParams
 
     #Compile and Publish the Configs
-    Write-Output "Deploying Config: $($config.ConfigName) to Target: $($config.TargetIP)"
+    Write-Output "Deploying Config: $($config.ConfigName) to Target: $targetIp"
     $configParams = @{
         TargetConfig = $config
+        TargetCimSession = $sessions.targetCimSession
         ContentStoreRootPath = $ContentStoreRootPath
         DeploymentCredential = $DeploymentCredential
         PartialCatalog = $PartialCatalog
@@ -181,7 +240,7 @@ foreach ($config in $targetConfigs.Configs)
     Send-Config @configParams
 
     #This cmdlet now breaks baremetal deployment
-    #Start-DscConfiguration -ComputerName $config.TargetIP.IPAddressToString -Credential $DeploymentCredential -UseExisting
+    #Start-DscConfiguration -ComputerName $targetIp -Credential $DeploymentCredential -UseExisting
 }
 
 #Cleanup

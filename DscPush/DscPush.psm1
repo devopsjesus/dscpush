@@ -271,6 +271,71 @@ function Get-PartialMetaData
     return $partialList
 }
 
+<#
+    .SYNOPSIS
+        Recursively produces a string output of hashtable contents (currently hashtable and array objs)
+        Must start with a Hashtable - TODO: add similar function, but starting with array
+
+    .PARAMETER InputObject
+#>
+Function ConvertFrom-Hashtable
+{
+    param
+    (
+        [parameter(Mandatory)]
+        [hashtable]
+        $InputObject
+    )
+
+    $hashstr = "@{"
+            
+    $keys = $InputObject.keys
+
+    foreach ($key in $keys)
+    { 
+        $value = $InputObject[$key]
+            
+        if ($value.GetType().Name -like "*hashtable*")
+        {
+            $hashstr += $key + "=" + $(ConvertFrom-Hashtable $value) + ";"
+        }
+        elseif ($value.GetType().BaseType -like "*array*")
+        {
+            $arrayString = "@("
+
+            foreach ($arrayValue in $value)
+            {
+                if ($arrayValue.GetType().Name -like "*hashtable*")
+                {
+                    $parsedValue = ConvertFrom-Hashtable $arrayValue
+                }
+                else
+                {
+                    $parsedValue = "`"$arrayValue`"" + "," 
+                }
+                $arrayString += $parsedValue
+            }
+
+            $arrayString = $arrayString.Trim(",")
+            $arrayString += ")"
+
+            $hashstr += $key + "=" + $arrayString + ";" 
+        }
+        elseif ($key -match "\s") 
+        {
+            $hashstr += "`"$key`"" + "=" + "`"$value`"" + ";"
+        }
+        else {
+            $hashstr += $key + "=" + "`"$value`"" + ";" 
+        } 
+    }
+            
+    $hashstr += "};"
+
+    return $hashstr
+}
+#endregion
+
 function Export-NodeDefinitionFile
 {
     param
@@ -315,7 +380,7 @@ function Export-NodeDefinitionFile
         foreach ($config in $node.Configs)
         {
             $configName = $config.ConfigName
-            $TargetIP = $config.TargetIP
+            $targetAdapter = $config.TargetAdapter
             $ContentHost = $config.ContentHost
             if ($ContentHost)
             {
@@ -330,9 +395,8 @@ function Export-NodeDefinitionFile
             $dataFileContents += "#region Target Config: $configName${crlf}"
             $dataFileContents += "`$$ConfigName = New-TargetConfig -Properties @{$crlf"
             $dataFileContents += "    ConfigName = '$configName'$crlf"
-            $dataFileContents += "    TargetIP = '$TargetIP'$crlf"
+
             $dataFileContents += "    ContentHost = `$$ContentHost$crlf"
-            
             if ($ContentHost)
             {
                 $dataFileContents += "    ContentStorePath = '$ContentStorePath'$crlf"
@@ -341,10 +405,33 @@ function Export-NodeDefinitionFile
             $dataFileContents += "    RoleList = @($crlf        `"$roleList`"$crlf    )$crlf"
             $dataFileContents += "}$crlf"
 
+            #Generate config targetAdapter property/class
+            if ($targetAdapter)
+            {
+                $dataFileContents += "`$${configName}AdapterProperties = @{$crlf"
+                $dataFileContents += "    InterfaceAlias = '$($targetAdapter.InterfaceAlias)'$crlf"
+                $dataFileContents += "    NetworkAddress = '$($targetAdapter.NetworkAddress)'$crlf"
+                $dataFileContents += "    SubnetBits     = '$($targetAdapter.SubnetBits)'$crlf"
+                $dataFileContents += "    DnsAddress     = '$($targetAdapter.DnsAddress)'$crlf"
+                $dataFileContents += "    AddressFamily  = '$($targetAdapter.AddressFamily)'$crlf"
+                $dataFileContents += "    Description    = '$($targetAdapter.Description)'$crlf"
+                $dataFileContents += "}$crlf"
+                $dataFileContents += "`$$ConfigName.TargetAdapter = New-TargetAdapter @${configName}AdapterProperties$crlf"
+            }
+            else
+            {
+                $dataFileContents += "`$${configName}AdapterProperties = @{$crlf"
+                $dataFileContents += "    InterfaceAlias = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    NetworkAddress = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    SubnetBits     = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    DnsAddress     = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    AddressFamily  = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    Description    = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "}$crlf"
+                $dataFileContents += "`$$ConfigName.TargetAdapter = New-TargetAdapter @${configName}AdapterProperties$crlf"
+            }
+
             #Get the list of unique parameters from the pool of partials
-            #Looks like WMF5.1 adds a case sensitivity switch to the sort-object cmdlet, which invalidates the following 2 lines below.
-            #This format is required due to case sensitivity of -Unique switch (Get-Unique behaves the same)
-            #$uniqueParamList = $config.Partials.Parameters.Name.ToLower() | Sort-Object -Unique
             $ParamObjList = $PartialCatalog.Where({$_.Name -in $config.RoleList}).Parameters
 
             $uniqueParamList = $ParamObjList.Name | Sort-Object -Unique
@@ -373,10 +460,14 @@ function Export-NodeDefinitionFile
                     }
                 }
 
-                #See note above about WMF5.1
-                #$paramName = $config.Partials.Parameters.Name.where({$_ -eq $parameter})[0] #to maintain case, instead of just using $parameter
-                #$dataFileContents += "    $paramName='$paramValue'$crlf"
-                $dataFileContents += "    $parameter='$paramValue'$crlf"
+                if ($paramValue.GetType().Name -like "*hashtable*")
+                {
+                    $dataFileContents += "    $parameter=$(ConvertFrom-Hashtable $paramValue)$crlf"
+                }
+                else
+                {
+                    $dataFileContents += "    $parameter='$paramValue'$crlf"
+                }
             }
 
             $dataFileContents += "}$crlf"
@@ -468,6 +559,101 @@ function Add-PartialProperties
     return $corePartial
 }
 
+function Enable-TargetLcmEncryption
+{
+    Param
+    (
+        [Parameter(Mandatory)]
+        [ValidatePattern("[a-f0-9]{40}")]
+        [String]
+        $LcmEncryptionCertThumbprint,
+
+        [Parameter(Mandatory)]
+        [securestring]
+        $CertPassword,
+
+        [Parameter()]
+        [string]
+        $TargetCertPath,
+
+        [Parameter()]
+        [string]
+        $LcmEncryptionPKPath,
+
+        [Parameter()]
+        [System.Management.Automation.Runspaces.PSSession]
+        $TargetPSSession
+    )
+
+    #region Enable passing creds to allow for importing the PK
+    $null = Enable-WSManCredSSP –Role Client –DelegateComputer $TargetPSSession.ComputerName -Force -ErrorAction Stop
+    try
+    {
+        $lcmPKName = (Get-Item -Path $LcmEncryptionPKPath -ErrorAction Stop).Name
+    }
+    catch
+    {
+        Disable-WSManCredSSP -Role Client -ErrorAction Ignore
+        throw "Could not access Target LCM Encryption Private Key at $LcmEncryptionPKPath"
+    }
+    #endregion
+
+    #region copy PK
+    $remotePKPath = "$TargetCertPath\$lcmPKName"
+
+    #attempt to copy the PK 5 times
+    for ($i = 5; $i -gt 0 ; $i--)
+    {
+        
+        $certExists = Invoke-Command { Test-Path -Path $using:remotePKPath } -Session $TargetPSSession
+        if ($certExists)
+        {
+            break
+        }
+        else
+        {
+            try
+            {
+                #Create the destination folder remotely if it doesn't exist
+                Invoke-Command -Session $targetPSSession -ScriptBlock {
+                    $remoteDir = Get-Item -Path $using:TargetCertPath -ErrorAction Ignore
+                    if (! $remoteDir) { $null = New-Item -ItemType Directory -Path $using:TargetCertPath -ErrorAction Continue }
+                }
+                Copy-Item -Path $LcmEncryptionPKPath -Destination $remotePKPath -ToSession $TargetPSSession -Force -ErrorAction Stop
+            }
+            catch
+            {
+                Disable-WSManCredSSP -Role Server -ErrorAction Ignore
+                continue
+            }
+        }
+    }
+    #endregion copy PK
+
+    #region import PK
+    $null = Invoke-Command {
+        $certImported = Test-Path -Path "Cert:\LocalMachine\My\$using:LcmEncryptionCertThumbprint"
+        if (! $certImported)
+        {
+            try
+            {
+                Enable-WSManCredSSP –Role Server -Force
+                Import-PfxCertificate -FilePath $using:remotePKPath -Password $using:CertPassword -CertStoreLocation "Cert:\LocalMachine\My"
+            }
+            catch
+            {
+                Disable-WSManCredSSP -Role Server -ErrorAction Ignore
+                throw "Certificate import failed."
+            }
+        }
+
+    } -Session $TargetPSSession
+    #endregion import PK
+
+    #Cleanup
+    $null = Disable-WSManCredSSP -Role Client
+}
+
 <#
     .SYNOPSIS
         Copies content to a remote computer.
@@ -493,28 +679,26 @@ function Copy-RemoteContent
     Param
     (
         [Parameter(Mandatory = $true)]
-        [string]
-        $Path,
+        [hashtable[]]
+        $CopyList,
+        
+        [Parameter(Mandatory = $true)]
+        [CimSession]
+        $targetCimSession,
 
         [Parameter(Mandatory = $true)]
-        [string]
-        $Destination,
-
-        [Parameter(Mandatory = $true)]
-        [string]
-        $Target,
+        [System.Management.Automation.Runspaces.PSSession]
+        $targetPSSession,
 
         [Parameter(Mandatory = $true)]
         [PSCredential]
         $Credential
     )
-    
-    #Create CIM & PS Session
-    $targetCimSession = New-CimSession -ComputerName $Target -Credential $Credential -ErrorAction Stop
-    $targetPSSession = New-PSSession -ComputerName $Target -Credential $Credential -ErrorAction Stop
 
+    $targetName = $($targetCimSession.ComputerName)
+    
     #Enable SMB firewall and update GP if SMB test fails
-    if (! (Test-NetConnection -ComputerName $Target -CommonTCPPort SMB -InformationLevel Quiet -WarningAction SilentlyContinue))
+    if (! (Test-NetConnection -ComputerName $targetName -CommonTCPPort SMB -InformationLevel Quiet -WarningAction SilentlyContinue))
     {
         Copy-NetFirewallRule -CimSession $targetCimSession -NewPolicyStore localhost -DisplayName 'File and Printer Sharing (SMB-In)' -ErrorAction Ignore
         Enable-NetFirewallRule -CimSession $targetCimSession -PolicyStore localhost
@@ -526,52 +710,86 @@ function Copy-RemoteContent
 
     #Enable SMB encryption
     Set-SmbServerConfiguration -CimSession $targetCimSession -EncryptData $true -Confirm:$false
-        
-    #Connect to target and create destination folder
-    $destinationUNC = $Destination.Replace(":","$")
 
-    #Create the destination directory using PSsession because New-Item has issues with passing credentials
-    Invoke-Command -Session $targetPSSession -ScriptBlock {
-        $null = New-Item -Type Directory -Path $using:Destination -ErrorAction Ignore
-    }
-
-    #determine drive letter
-    $driveMounted = $false
-    for ($i = 69; $i -lt 91 ; $i++)
+    foreach ($copyItem in $copyList)
     {
-        #assign drive name by unicode
-        $driveName = [char]$i
+        #Variables assemble! - this should obviously be a function call, but i'm not in the mood right now. :|
+        $destinationPath = $copyItem.Destination
+        $destinationUncPath = $copyItem.Destination.Replace(":","$")
+        $fullDestinationUncPath = "\\$targetName\$destinationUncPath"
+        $driveName = "DCSPushRC-$targetName" -replace "[;~/\.:]",""
+        $driveMounted = $false
 
-        try
+        #Attempt the drive mounting operation 5 times
+        #certain actions in this loop aren't as stable as we'd like, so we just try them a few times
+        for ($i = 5; $i -gt 0 ; $i--)
         {
-            $psDrive = New-PSDrive -Name $driveName -PSProvider "filesystem" -Root "\\$Target\$destinationUNC" -Credential $Credential -ErrorAction Stop
-            Start-Sleep -Seconds 1
+            #Create the destination folder remotely if it doesn't exist
+            Invoke-Command -Session $targetPSSession -ScriptBlock {
+                $remoteDir = Get-Item -Path $using:destinationPath -ErrorAction Ignore
+                if (! $remoteDir) { $null = New-Item -ItemType Directory -Path $using:destinationPath -ErrorAction Continue }
+            }
 
-            if (Get-PSDrive -Name $driveName)
+            try
             {
+                #Mount the PS Drive, which enables SMB3 speeds
+                #would preferably like to mount shared parent paths to speed up the process, but that complexity will have to be added later 
+                $psDrive = New-PSDrive -Name $driveName -PSProvider "filesystem" -Root $fullDestinationUncPath -Credential $Credential -ErrorAction Stop
+            }
+            catch
+            {
+                $driveMounted = $false
+                continue
+            }
+
+            #Let the filesystem operation catch up and test 
+            Start-Sleep -Seconds 1
+            try
+            {
+                $null = Get-PSDrive -Name $driveName
                 $driveMounted = $true
                 break
             }
+            catch
+            {
+                $driveMounted = $false
+                Write-Warning "Failed to mount remote drive ($fullDestinationUncPath).  Attempting $i more times..."
+                continue
+            }
         }
-        catch
+
+        #If the drive can't be mounted, it's likely the target doesn't have file/printer sharing enabled, so we'll just copy via PS session instead (slower)
+        if (! $driveMounted)
         {
-            $driveMounted = $false
+            Write-Warning "Could not mount remote drive. Attempting copy using PS Session."
+            try
+            {
+                Copy-Item -Path "$($copyItem.Path)\*" -Destination $destinationPath -ToSession $targetPSSession -Force -Recurse
+            }
+            catch
+            {
+                throw "Something went wrong with the file copy to destination $destinationPath on target $targetName"
+            }
+        }
+        else
+        {
+            Write-Verbose "Copying $($copyItem.Path) to Destination $destinationUncPath"
+            try
+            {
+                Copy-Item -Path "$($copyItem.Path)\*" -Destination "${driveName}:\" -Force -Recurse
+                Get-ChildItem -Path "${driveName}:\" -Recurse -Force | Unblock-File
+                continue
+            }
+            catch
+            {
+                throw "Something went wrong with the file copy to destination $destinationUncPath"
+            }
+            finally
+            {
+                Remove-PSDrive -Name $driveName
+            }
         }
     }
-
-    if (! $driveMounted)
-    {
-        throw "Could not mount drive"
-    }
-
-    #Create root directory and copy content
-    Copy-Item -Path "$Path\*" -Destination "${driveName}:\" -Force -Recurse
-    Get-ChildItem -Path "${driveName}:\" -Recurse -Force | Unblock-File
-
-    #Cleanup
-    Remove-PSDrive -Name $psDrive -ErrorAction Ignore
-    Remove-CimSession -CimSession $targetCimSession
-    Remove-PSSession -Session $targetPSSession
 }
 
 function Initialize-DeploymentEnvironment
@@ -629,7 +847,7 @@ function Initialize-DeploymentEnvironment
 
     #Unblock the content store
     Get-ChildItem $ContentStoreRootPath -Recurse | Unblock-File
-
+    
     #Required modules will be copied to the C:\Program Files\WindowsPowerShell\Modules  #logged in user's documents folder
     $moduleDestPath = $env:PSModulePath.Split(";")[1]
     
@@ -643,7 +861,6 @@ function Initialize-DeploymentEnvironment
 
     #Copy DSC Resources to the host's module path
     Copy-Item -Path "$ContentStoreDscResourceStorePath\*" -Destination $moduleDestPath -Recurse -Force
-
 
     # Ensure WinRM is running
     if ((Get-Service "WinRM" -ErrorAction Stop).status -eq 'Stopped') 
@@ -667,7 +884,161 @@ function Initialize-DeploymentEnvironment
     return $currentTrustedHost
 }
 
-function Copy-DscResource
+function Connect-TargetAdapter
+{
+    param
+    (
+        [parameter(Mandatory)]
+        [ipaddress]
+        $TargetIpAddress,
+
+        [parameter(Mandatory)]
+        [TargetAdapter]
+        $TargetAdapter,
+        
+        [parameter(Mandatory)]
+        [pscredential]
+        $Credential
+    )
+
+    #Try to reach the target first
+    try
+    {
+        Write-Verbose "Testing Connection to Target: $TargetIpAddress"
+        $null = Test-WSMan $TargetIpAddress -ErrorAction Stop
+    }
+    catch
+    {
+        Write-Warning "Could not reach target $TargetIpAddress. Skipping target..."
+        return $false
+    }
+
+    try
+    {
+        $targetCimSession = New-CimSession -ComputerName $TargetIpAddress -Credential $Credential -ErrorAction Stop
+        $targetPSSession = New-PSSession -ComputerName $TargetIpAddress -Credential $Credential -ErrorAction Stop
+    }
+    catch
+    {
+        Write-Warning "Could not create Sessions to target: $targetIp. Skipping Target..."
+        continue
+    }
+
+    try
+    {
+        $retrievedIpConfig = Get-NetIPConfiguration -CimSession $targetCimSession -Detailed
+    }
+    catch
+    {
+        Write-Warning "Could not retrieve actual IP configuration from target: $TargetIpAddress. Skipping target..."
+        return $false
+    }
+
+    #Ensure MAC or Alias of the config's target adapter match the actual target's adapter
+    if ("PhysicalAddress" -in $TargetAdapter)
+    {
+        if ($TargetAdapter.PhysicalAddress -notin $retrievedIpConfig.NetAdapter.LinkLayerAddress)
+        {
+            Write-Warning "MAC Address not found on target: $TargetIpAddress. Skipping target..."
+            return $false
+        }
+    }
+    else #Use alias if there is no MAC provided, but recommend using MAC!
+    {
+        if ($TargetAdapter.InterfaceAlias -notin $retrievedIpConfig.NetAdapter.InterfaceAlias)
+        {
+            Write-Warning "InterfaceAlias not found on target: $TargetIpAddress. Skipping target..."
+            return $false
+        }
+    }
+
+    return @{
+        targetCimSession=$targetCimSession
+        targetPSSession=$targetPSSession
+    }
+}
+
+function Write-Config
+{
+    param
+    (
+        [parameter(Mandatory)]
+        $TargetConfig,
+
+        [Parameter()]
+        [string]
+        $ContentStoreRootPath,
+
+        [Parameter()]
+        [pscredential]
+        $DeploymentCredential,
+
+        [Parameter()]
+        [DscPartial[]]
+        $PartialCatalog,
+
+        [parameter()]
+        [string]
+        $MofOutputPath
+    )
+
+    $targetIP = $TargetConfig.TargetAdapter.NetworkAddress.IPAddressToString
+
+    $targetPartials = $PartialCatalog.where({$_.Name -in $TargetConfig.RoleList})
+
+    #Create the $MofOutputPath Directory if necessary
+    if (! (Test-Path $MofOutputPath))
+    {
+        $null = New-Item -Path $MofOutputPath -Type Directory -Force -ErrorAction Stop
+    }
+
+    #Create the directory containing the targets partial mof output directories if necessary
+    $compiledMofRootPath = Join-Path -Path $MofOutputPath -ChildPath $targetIP
+    if (! (Test-Path $compiledMofRootPath))
+    {
+        $null = New-Item -Path $compiledMofRootPath -Type Directory -Force -ErrorAction Stop
+    }
+    
+    foreach ($partial in $targetPartials)
+    {
+        Write-Output "    Compiling Partial: $($partial.Name)"
+
+        #Create Partial mof output directory
+        $compiledPartialMofPath = Join-Path -Path $compiledMofRootPath -ChildPath $partial.Name
+        $null = Remove-Item -Path $compiledPartialMofPath -Recurse -Force -Confirm:$false -ErrorAction Ignore
+        $null = New-Item -Path $compiledPartialMofPath -ItemType Directory -Force -ErrorAction Stop
+
+        #Manually add TargetName and OutPutPath params until we can edit partials to correct this whacky step
+        $paramList = @{}
+        $paramList.Add("TargetName", $targetIP)
+        $paramList.Add("OutPutPath", $compiledPartialMofPath)
+
+        #Add in the secrets from the TargetConfig object if the param type is pscredential
+        $partial.Parameters.Name.ForEach({
+            if ($_ -in $TargetConfig.Secrets.Secret)
+            {
+                $paramList.Add($_, (New-Object System.Management.Automation.PSCredential ($TargetConfig.Secrets.Username, $TargetConfig.Secrets.Password)))
+            }
+            else
+            {
+                $paramList.Add($_, $TargetConfig.Variables.$_)
+            }
+        })
+
+        #Compile the partial
+        try
+        {
+            . "$($partial.Path)" @paramList
+        }
+        catch
+        {
+            $errormsg = $_.Exception.Message
+            throw "Failed to publish: $($partial.PartialPath).`r`nActual Error: " + $errormsg
+        }
+    }
+}
+
+function Select-DscResource
 {
     param
     (
@@ -696,21 +1067,15 @@ function Copy-DscResource
     #Retrive unique list of required DSC Resources
     $targetResources = ($targetPartials.Resources.Where({!([string]::IsNullOrEmpty($_))}).Split(",")) | Select-Object -Unique
 
-    #$session = New-PSSession -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential
-    foreach ($resource in $targetResources)
-    {
-        $copyResourceParams = @{
-            Path="$ContentStoreDscResourceStorePath\$resource"
-            Destination="$modulePath\$resource"
-            Target=$TargetConfig.TargetIP
-            Credential=$DeploymentCredential
+    #Create an array of all DSC resources required
+    $resourcesToCopy += $targetResources.foreach({
+        return @{
+            Path="$ContentStoreDscResourceStorePath\$_"
+            Destination="$modulePath\$_"
         }
-
-        Copy-RemoteContent @copyResourceParams
-        
-        #$null = Copy-Item -Path "$ContentStoreDscResourceStorePath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
-    }
-    #$null = Remove-PSSession -Session $session
+    })
+    
+    return $resourcesToCopy
 }
 
 function Initialize-TargetLcm
@@ -725,9 +1090,18 @@ function Initialize-TargetLcm
         [TargetConfig]
         $TargetConfig,
 
+        [parameter(Mandatory)]
+        [CimSession]
+        $targetCimSession,
+
         [parameter()]
         [string]
         $CorePartial,
+
+        [Parameter(ParameterSetName = 'LcmEncryption')]
+        [ValidatePattern("[a-f0-9]{40}")]
+        [string]
+        $LcmEncryptionCertThumbprint,
 
         [parameter()]
         [pscredential]
@@ -738,22 +1112,39 @@ function Initialize-TargetLcm
         $MofOutputPath
     )
 
-    $targetIP = $TargetConfig.TargetIP.IPAddressToString
+    $targetIP = $TargetConfig.TargetAdapter.NetworkAddress.IPAddressToString
 
-    #Create CIM & PS Session
-    $targetCimSession = New-CimSession -ComputerName $targetIP -Credential $Credential -ErrorAction Stop
+    #Create the directory containing the targets partial mof output directories if necessary
+    $compiledMofRootPath = Join-Path -Path $MofOutputPath -ChildPath $targetIP
+    if (! (Test-Path $compiledMofRootPath))
+    {
+        $null = New-Item -Path $compiledMofRootPath -Type Directory -Force -ErrorAction Stop
+    }
 
     # build local config
     [DSCLocalConfigurationManager()]
     Configuration TargetConfiguration
     {
         Node $targetIP
-        {            
-            Settings
-            {                              
-                RebootNodeIfNeeded = $TargetLcmSettings.RebootNodeIfNeeded
-                ConfigurationModeFrequencyMins = $TargetLcmSettings.ConfigurationModeFrequencyMins
-                ConfigurationMode = $TargetLcmSettings.ConfigurationMode
+        {
+            if ($LcmEncryptionCertThumbprint)
+            {
+                Settings
+                {
+                    CertificateId = $LcmEncryptionCertThumbprint
+                    RebootNodeIfNeeded = $TargetLcmSettings.RebootNodeIfNeeded
+                    ConfigurationModeFrequencyMins = $TargetLcmSettings.ConfigurationModeFrequencyMins
+                    ConfigurationMode = $TargetLcmSettings.ConfigurationMode
+                }
+            }
+            else
+            {
+                Settings
+                {
+                    RebootNodeIfNeeded = $TargetLcmSettings.RebootNodeIfNeeded
+                    ConfigurationModeFrequencyMins = $TargetLcmSettings.ConfigurationModeFrequencyMins
+                    ConfigurationMode = $TargetLcmSettings.ConfigurationMode
+                }
             }
 
             foreach ($partial in $TargetConfig.RoleList)
@@ -771,11 +1162,15 @@ function Initialize-TargetLcm
         }
     }
 
-    $null = TargetConfiguration -OutputPath $mofOutputPath -ErrorAction Stop
+    $null = TargetConfiguration -OutputPath $compiledMofRootPath -ErrorAction Stop
     
-    $null = Set-DscLocalConfigurationManager -CimSession $targetCimSession -Path $mofOutputPath -ErrorAction Stop
+    $null = Stop-DscConfiguration -CimSession $targetCimSession -WarningAction Ignore
+    while (($null = Get-DscLocalConfigurationManager -CimSession $targetCimSession).LCMState -eq "Busy")
+    {
+        Start-Sleep 1
+    }
 
-    Remove-CimSession -CimSession $targetCimSession
+    $null = Set-DscLocalConfigurationManager -CimSession $targetCimSession -Path $compiledMofRootPath -ErrorAction Stop
 }
 
 function Send-Config
@@ -784,6 +1179,10 @@ function Send-Config
     (
         [parameter(Mandatory)]
         $TargetConfig,
+
+        [parameter(Mandatory)]
+        [CimSession]
+        $TargetCimSession,
 
         [Parameter()]
         [string]
@@ -802,52 +1201,28 @@ function Send-Config
         $MofOutputPath
     )
 
-    $targetIP = $TargetConfig.TargetIP.IPAddressToString
-
-    #Create CIM & PS Session
-    $targetCimSession = New-CimSession -ComputerName $targetIP -Credential $DeploymentCredential -ErrorAction Stop
-
+    $targetIP = $TargetConfig.TargetAdapter.NetworkAddress.IPAddressToString
+        
     $targetPartials = $PartialCatalog.where({$_.Name -in $TargetConfig.RoleList})
+    
+    $compiledMofRootPath = Join-Path -Path $MofOutputPath -ChildPath $targetIP
+    $compiledPartialMofs = Get-ChildItem -Path $compiledMofRootPath -Recurse -Filter "*.mof" -Exclude "*.meta.mof"
+    $compiledPartialNames = Split-Path -Path $compiledPartialMofs.DirectoryName -Leaf
+
+    $targetPartials = $compiledPartialNames.where({ $_ -in $TargetConfig.RoleList })
     
     foreach ($partial in $targetPartials)
     {
-        Write-Output "  Compiling Partial: $($partial.Name)"
-
-        $paramList = @{}
-        $paramList.Add("TargetName", $targetIP)
-        $paramList.Add("OutPutPath", $MofOutputPath)
-
-        $partial.Parameters.Name.ForEach({
-            if ($_ -in $TargetConfig.Secrets.Secret)
-            {
-                $paramList.Add($_, (New-Object System.Management.Automation.PSCredential ($TargetConfig.Secrets.Username, $TargetConfig.Secrets.Password)))
-            }
-            else
-            {
-                $paramList.Add($_, $TargetConfig.Variables.$_)
-            }
-        })
-
-        try
-        {
-            #Compile the partial using the ParamList
-            . "$($partial.Path)" @paramList
-        }
-        catch
-        {
-            $errormsg = $_.Exception.Message
-            throw "Failed to publish: $($partial.PartialPath).`r`nActual Error: " + $errormsg
-        }
+        $compiledPartialMofPath = Join-Path -Path $compiledMofRootPath -ChildPath $partial
 
         while (($null = Get-DscLocalConfigurationManager -CimSession $targetCimSession).LCMState -eq "Busy")
         {
             Start-Sleep 1
         }
 
-        $null = Publish-DscConfiguration -CimSession $targetCimSession -Path $MofOutputPath -ErrorAction Stop
+        #$null = Invoke-Command -ScriptBlock { Publish-DscConfiguration -Path $using:MofOutputPath -ErrorAction Stop } -Session $targetPSSession
+        $null = Publish-DscConfiguration -Path $compiledPartialMofPath -ComputerName $targetIP -Credential $DeploymentCredential -ErrorAction Stop
     }
-
-    Remove-CimSession -CimSession $targetCimSession
 }
 
 function ConvertTo-ByteArray {
@@ -1049,7 +1424,6 @@ function Update-NodeDefinitionFile
 }
 
 #region Class Definitions
-
 Class DscPartial
 {
     [string]
@@ -1082,8 +1456,8 @@ Class TargetConfig
     [string]
     $ConfigName
 
-    [ipaddress]
-    $TargetIP
+    [TargetAdapter]
+    $TargetAdapter
     
     [array]
     $RoleList
@@ -1111,10 +1485,10 @@ Class TargetConfig
         $this.Properties = ($this | Get-Member -MemberType Properties).Name
     }
 
-    TargetConfig ( [string] $ConfigName, [ipaddress] $TargetIP, [array] $RoleList, [string] $ContentHost, [string] $ContentStorePath, [hashtable[]] $Dependencies, [string[]]$Secrets )
+    TargetConfig ( [string] $ConfigName, [ipaddress] $TargetAdapter, [array] $RoleList, [string] $ContentHost, [string] $ContentStorePath, [hashtable[]] $Dependencies, [string[]]$Secrets )
     {
         $this.ConfigName = $ConfigName
-        $this.TargetIP = $TargetIP
+        $this.TargetAdapter = $TargetAdapter
         $this.RoleList = $RoleList -split ','
         $this.ContentHost = $ContentHost
         $this.ContentStorePath = $ContentStorePath
@@ -1243,7 +1617,7 @@ class DscLcm
         $this.RefreshMode = "Push"
     }
 
-    DscLcm ( [hashtable]$Properties)
+    DscLcm ([hashtable]$Properties)
     {
         $this.ConfigurationModeFrequencyMins = $Properties.ConfigurationModeFrequencyMins
         $this.RebootNodeIfNeeded = $Properties.RebootNodeIfNeeded
@@ -1311,6 +1685,100 @@ class LcmPartialConfiguration
     { }
 }
 
+class TargetAdapter
+{
+    [uint32]
+    $InterfaceIndex
+
+    [string]
+    $InterfaceAlias
+  
+    [string]
+    $PhysicalAddress
+  
+    [ipaddress[]]
+    $NetworkAddress
+
+    [uint16]
+    $SubnetBits
+
+    [ipaddress[]]
+    $DnsAddress
+
+    [ipaddress]
+    $Gateway
+
+    [string]
+    $AddressFamily
+
+    [string]
+    $NetworkCategory
+
+    [string]
+    $Description
+  
+    [string]
+    $Status
+
+    [uint64]
+    $Speed
+  
+    [uint16]
+    $VlanID
+
+  # Constructors
+    TargetAdapter ( )
+    { }
+
+    TargetAdapter ([hashtable]$Properties)
+    {
+        $this.InterfaceIndex = $Properties.InterfaceIndex
+        $this.InterfaceAlias = $Properties.InterfaceAlias
+        $this.PhysicalAddress  = $Properties.PhysicalAddress
+        $this.NetworkAddress = $Properties.NetworkAddress
+        $this.SubnetBits = $Properties.SubnetBits
+        $this.DnsAddress = $Properties.DnsAddress
+        $this.Gateway = $Properties.Gateway
+        $this.AddressFamily = $Properties.AddressFamily
+        $this.NetworkCategory = $Properties.NetworkCategory
+        $this.Description = $Properties.Description
+        $this.Status = $Properties.Status
+        $this.Speed = $Properties.Speed
+        $this.VlanID = $Properties.VlanID
+    }
+    
+TargetAdapter ( 
+        [uint32] $InterfaceIndex, 
+        [string] $InterfaceAlias,
+        [string] $PhysicalAddress, 
+        [ipaddress[]] $NetworkAddress,
+        [uint16] $SubnetBits,
+        [ipaddress[]] $DnsAddress,
+        [ipaddress] $Gateway,
+        [string] $AddressFamily,
+        [string] $NetworkCategory,
+        [string] $Description,
+        [string] $Status,
+        [uint64] $Speed,
+        [uint16] $VlanID
+    )
+    {
+        $this.InterfaceIndex = $InterfaceIndex
+        $this.InterfaceAlias = $InterfaceAlias
+        $this.PhysicalAddress  = $PhysicalAddress
+        $this.NetworkAddress = $NetworkAddress
+        $this.SubnetBits = $SubnetBits
+        $this.DnsAddress = $DnsAddress
+        $this.Gateway = $Gateway
+        $this.AddressFamily = $AddressFamily
+        $this.NetworkCategory = $NetworkCategory
+        $this.Description = $Description
+        $this.Status = $Status
+        $this.Speed = $Speed
+        $this.VlanID = $VlanID
+    }
+}
+
 Enum ConfigurationMode
 {
     ApplyAndAutoCorrect
@@ -1337,7 +1805,6 @@ Enum DebugMode
     ForceModuleImport
     All
 }
-
 #endregion Class Definitions
 
 #region Class Instantiation
@@ -1477,5 +1944,88 @@ function New-LcmPartialConfiguration
     }
    
     return $newLcmPartial
+}
+
+
+<#
+    .SYNOPSIS
+        Creates a new TargetAdapter object.
+
+    .DESCRIPTION
+        See synopsis.
+
+    .SAMPLE
+        New-TargetAdapter -InterfaceAlias Ethernet -NetworkAddress 192.0.0.253 -SubnetBits 24 -DnsAddress 127.0.0.1 -AddressFamily IPv4 -Description test
+#>
+function New-TargetAdapter
+{
+    param
+    (
+        [Parameter()]
+        [uint32]
+        $InterfaceIndex,
+
+        [Parameter()]
+        [string]
+        $InterfaceAlias,
+  
+        [Parameter()]
+        [string]
+        $PhysicalAddress,
+  
+        [Parameter()]
+        [ipaddress]
+        $NetworkAddress,
+
+        [Parameter()]
+        [int16]
+        $SubnetBits,
+
+        [Parameter()]
+        [ipaddress[]]
+        $DnsAddress,
+
+        [Parameter()]
+        [ipaddress]
+        $Gateway,
+
+        [Parameter()]
+        [ValidateSet("IPv4","IPv6")]
+        [string]
+        $AddressFamily,
+
+        [Parameter()]
+        [ValidateSet("DomainAuthenticated","Private","Public")]
+        [string]
+        $NetworkCategory,
+        
+        [Parameter()]
+        [string]
+        $Description,
+
+        [Parameter()]
+        [string]
+        $Status,
+        
+        [Parameter()]
+        [uint64]
+        $Speed,
+  
+        [Parameter()]
+        [uint16]
+        $VlanID
+    )
+
+    [hashtable]$nicProperties = $PSBoundParameters
+    $nicProperties.Remove("Verbose")
+    
+    $targetAdapter = [TargetAdapter]::new($nicProperties)
+
+    foreach ($property in $PSBoundParameters.GetEnumerator())
+        {
+            $targetAdapter.($property.key) = $property.value
+        }
+   
+    return $targetAdapter
 }
 #endregion Class Instantiation

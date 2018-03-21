@@ -50,7 +50,7 @@
 
     [Parameter()]
     [string]
-    $UpdateNodeDefinitionFilePath = "$ContentStoreRootPath\DSCPushSetup\DefinitionStore\newNodeDefinition.ps1"
+    $UpdateNodeDefinitionFilePath = "$DSCPushSetupPath\DefinitionStore\newNodeDefinition.ps1"
 )
 
 #region Modules
