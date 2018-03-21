@@ -59,12 +59,21 @@ Remove-Item -Path $NodeDefinitionFilePath -ErrorAction SilentlyContinue
 #region Update Node Definition
 $nodeDefinition = . $NodeDefinitionFilePath
 
-$nodeDefinition.Configs[0].TargetIP = "192.0.0.253"
+$adNetConfigProperties = @{
+    InterfaceAlias = 'Ethernet'
+    NetworkAddress = '192.0.0.253'
+    SubnetBits     = '24'
+    DnsAddress     = '192.0.0.253'
+    AddressFamily  = 'IPv4'
+    Description    = ''
+}
+$DscPushAD.TargetAdapter = New-TargetAdapter @adNetConfigProperties
+
 $nodeDefinition.Configs[0].Variables = @{
     DomainName = "DscPush.local"
     NetworkConfig = '[
     {
-        "SubnetBitMask":  16,
+        "SubnetBitMask":  24,
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
         "Alias":  "Ethernet",
@@ -77,12 +86,21 @@ $nodeDefinition.Configs[0].Variables = @{
     ContentStore = "\\CH\C$\ContentStore"
 }
 
-$nodeDefinition.Configs[1].TargetIP = "192.0.0.251"
+
+$chNetConfigProperties = @{
+    InterfaceAlias = 'Ethernet'
+    NetworkAddress = '192.0.0.251'
+    SubnetBits     = '24'
+    DnsAddress     = '192.0.0.253'
+    AddressFamily  = 'IPv4'
+    Description    = ''
+}
+$DscPushCH.TargetAdapter = New-TargetAdapter @chNetConfigProperties
 $nodeDefinition.Configs[1].Variables = @{
     DomainName = "DscPush.local"
     NetworkConfig = '[
     {
-        "SubnetBitMask":  16,
+        "SubnetBitMask":  24,
         "DefaultGateway":  "",
         "NetworkCategory":  "DomainAuthenticated",
         "Alias":  "Ethernet",
@@ -103,4 +121,4 @@ $UpdateNodeDefinitionFileParams = @{
 DSCPush\Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
 #endregion
 
-. "$SetupFolder\Publish-TargetConfig.ps1" -ForceResourceCopy -SanitizeModulePaths
+. "$SetupFolder\Publish-TargetConfig.ps1" -CompilePartials -ForceResourceCopy -SanitizeModulePaths

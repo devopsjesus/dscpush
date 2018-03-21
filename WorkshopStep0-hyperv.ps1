@@ -20,8 +20,8 @@ param(
     [switch]$Clobber,
     
     $VmList = @(
-        @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-E9-10'; VmMemory = 1024MB }
-        @{TargetItemName = 'DscPushCH'; TargetIP = '192.0.0.251'; MacAddress = '00-15-5d-36-E9-11'; VmMemory = 1024MB }
+        @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-F1-10'; VmMemory = 1024MB }
+        @{TargetItemName = 'DscPushCH'; TargetIP = '192.0.0.251'; MacAddress = '00-15-5d-36-F1-11'; VmMemory = 1024MB }
     )
 )
 

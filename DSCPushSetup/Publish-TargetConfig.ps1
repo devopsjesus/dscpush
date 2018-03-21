@@ -200,6 +200,7 @@ foreach ($config in $targetConfigs.Configs)
         Copy-RemoteContent @contentCopyParams
     }
 
+    $targetLcmParams = $null
     if ($EnableTargetLcmEncryption)
     {
         Write-Output "  Enabling LCM Encryption"
@@ -212,12 +213,12 @@ foreach ($config in $targetConfigs.Configs)
         }
         Enable-TargetLcmEncryption @targetLcmEncryptionParams
 
-        $TargetLcmParams = @{ LcmEncryptionCertThumbprint = $LcmEncryptionCertThumbprint }
+        $targetLcmParams = @{ LcmEncryptionCertThumbprint = $LcmEncryptionCertThumbprint }
     }
 
     #Set the LCM
     Write-Output "Initializing LCM Settings"
-    $TargetLcmParams += @{
+    $targetLcmParams += @{
         TargetLcmSettings = $TargetLcmSettings
         TargetConfig = $config
         TargetCimSession = $sessions.targetCimSession
@@ -225,7 +226,7 @@ foreach ($config in $targetConfigs.Configs)
         Credential = $DeploymentCredential
         MofOutputPath = $mofOutputPath
     }
-    Initialize-TargetLcm @TargetLcmParams
+    Initialize-TargetLcm @targetLcmParams
 
     #Compile and Publish the Configs
     Write-Output "Deploying Config: $($config.ConfigName) to Target: $targetIp"
