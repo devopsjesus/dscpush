@@ -24,6 +24,7 @@ param
 
     [Parameter()]
     [string]
+    $AdapterAlias = "Ethernet"
 )
 
 $ProgressPreference = "SilentlyContinue"
