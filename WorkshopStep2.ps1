@@ -20,7 +20,10 @@ param
 
     [Parameter()]
     [array]
-    $TargetIPs = @("192.0.0.245","192.0.0.246")
+    $TargetIPs = @("192.0.0.245","192.0.0.246"),
+
+    [Parameter()]
+    [string]
 )
 
 $ProgressPreference = "SilentlyContinue"
@@ -76,7 +79,7 @@ Initialize-DscPush -GenerateNewNodeDefinitionFile -SettingsPath $SettingsPath -N
 $nodeDefinition = . $NodeDefinitionFilePath
 
 $adNetConfigProperties = @{
-    InterfaceAlias = 'Ethernet'
+    InterfaceAlias = $AdapterAlias
     NetworkAddress = $TargetIPs[0]
     SubnetBits     = '24'
     DnsAddress     = $TargetIPs[0]
@@ -91,7 +94,7 @@ $nodeDefinition.Configs[0].Variables = @{
     {
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
-        `"Alias`":  `"Ethernet`",
+        `"Alias`":  `"$AdapterAlias`",
         `"IPAddress`"`:  `"$($TargetIPs[0])`",
         `"DNSServer`":  `"$($TargetIPs[0])`"
     }
@@ -102,7 +105,7 @@ $nodeDefinition.Configs[0].Variables = @{
 }
 
 $chNetConfigProperties = @{
-    InterfaceAlias = 'Ethernet'
+    InterfaceAlias = $AdapterAlias
     NetworkAddress = $TargetIPs[1]
     SubnetBits     = '24'
     DnsAddress     = $TargetIPs[0]
@@ -116,7 +119,7 @@ $nodeDefinition.Configs[1].Variables = @{
     {
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
-        `"Alias`":  `"Ethernet`",
+        `"Alias`":  `"$AdapterAlias`",
         `"IPAddress`"`:  `"$($TargetIPs[1])`",
         `"DNSServer`":  `"$($TargetIPs[0])`"
     }
@@ -133,8 +136,6 @@ $UpdateNodeDefinitionFileParams = @{
     }
 Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
 #endregion
-
-
 
 $publishTargetSettings = @{
     CompilePartials                  = $true
