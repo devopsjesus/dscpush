@@ -16,7 +16,11 @@ param
 
     [Parameter()]
     [string]
-    $DSCPushModulePath = "$WorkshopPath\Modules\DSCPush"
+    $DSCPushModulePath = "$WorkshopPath\Modules\DSCPush",
+
+    [Parameter()]
+    [array]
+    $TargetIPs = @("192.0.0.245","192.0.0.246")
 )
 
 $ProgressPreference = "SilentlyContinue"
@@ -34,7 +38,7 @@ $NodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\workshop.p
 
 $currentDir = (Get-Item .).FullName
 
-foreach ($vm in "192.0.0.253","192.0.0.251")
+foreach ($vm in $TargetIps)
 {
     try
     {
@@ -44,26 +48,38 @@ foreach ($vm in "192.0.0.253","192.0.0.251")
     {
         throw "Cannot estable WinRM session to $vm."
     }
-} 
-
-$partialCatalogPath = . "$SetupFolder\Initialize-DscPush.ps1" -GeneratePartialCatalog
-$partialCatalog = Import-PartialCatalog $partialCatalogPath
-
-Remove-Item -Path $NodeDefinitionFilePath -ErrorAction SilentlyContinue
-. "$SetupFolder\Initialize-DscPush.ps1" -GenerateNewNodeDefinitionFile -NodeTemplatePath "$SettingsPath\NodeTemplate.ps1" -NodeDefinitionFilePath $NodeDefinitionFilePath
-
-. "$SetupFolder\Initialize-DscPush.ps1" -GenerateSecrets
+}
 
 #Update the Node Definition File - this would typically be done by hand.
 #This section can be performed manually
+#default vars
+$partialCatalogPath               = "$WorkshopPath\DSCPushSetup\Settings\PartialCatalog.json"
+$partialStorePath                 = "$WorkshopPath\Partials"
+$deploymentCredential             = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force)))
+$ContentStoreDestPath             = $WorkshopPath
+$contentStoreModulePath           = "$WorkshopPath\Modules"
+$contentStoreDscResourceStorePath = "$WorkshopPath\Resources"
+$nodeDefinitionFilePath           = "$WorkshopPath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
+$partialDependenciesFilePath      = "$WorkshopPath\DSCPushSetup\Settings\PartialDependencies.json"
+$partialSecretsPath               = "$WorkshopPath\DSCPushSetup\Settings\PartialSecrets.json"
+$storedSecretsPath                = "$WorkshopPath\DSCPushSetup\Settings\StoredSecrets.json"
+$secretsKeyPath                   = "$WorkshopPath\DSCPushSetup\Settings\SecretsKey.json"
+$mofOutputPath                    = "$WorkshopPath\DSCPushSetup\Settings\mofStore"
+
+Initialize-DscPush -GeneratePartialCatalog -PartialCatalogPath $partialCatalogPath -PartialStorePath $partialStorePath
+$partialCatalog = Import-PartialCatalog "$SettingsPath\PartialCatalog.json"
+
+Remove-Item -Path $NodeDefinitionFilePath -ErrorAction SilentlyContinue
+Initialize-DscPush -GenerateNewNodeDefinitionFile -SettingsPath $SettingsPath -NodeTemplatePath "$SettingsPath\NodeTemplate.ps1" -NodeDefinitionFilePath $NodeDefinitionFilePath -GenerateSecrets -PartialCatalogPath "$SettingsPath\PartialCatalog.json" -PartialStorePath "$WorkshopPath\Partials"
+
 #region Update Node Definition
 $nodeDefinition = . $NodeDefinitionFilePath
 
 $adNetConfigProperties = @{
     InterfaceAlias = 'Ethernet'
-    NetworkAddress = '192.0.0.253'
+    NetworkAddress = $TargetIPs[0]
     SubnetBits     = '24'
-    DnsAddress     = '192.0.0.253'
+    DnsAddress     = $TargetIPs[0]
     AddressFamily  = 'IPv4'
     Description    = ''
 }
@@ -71,43 +87,40 @@ $DscPushAD.TargetAdapter = New-TargetAdapter @adNetConfigProperties
 
 $nodeDefinition.Configs[0].Variables = @{
     DomainName = "DscPush.local"
-    NetworkConfig = '[
+    NetworkConfig = "[
     {
-        "SubnetBitMask":  24,
-        "DefaultGateway":  "",
-        "NetworkCategory":  "DomainAuthenticated",
-        "Alias":  "Ethernet",
-        "IPAddress":  "192.0.0.253",
-        "DNSServer":  "192.0.0.253"
+        `"SubnetBitMask`":  24,
+        `"NetworkCategory`":  `"DomainAuthenticated`",
+        `"Alias`":  `"Ethernet`",
+        `"IPAddress`"`:  `"$($TargetIPs[0])`",
+        `"DNSServer`":  `"$($TargetIPs[0])`"
     }
-]'
+]"
     JoinDomain = "false"
     ComputerName = "DC"
     ContentStore = "\\CH\C$\ContentStore"
 }
 
-
 $chNetConfigProperties = @{
     InterfaceAlias = 'Ethernet'
-    NetworkAddress = '192.0.0.251'
+    NetworkAddress = $TargetIPs[1]
     SubnetBits     = '24'
-    DnsAddress     = '192.0.0.253'
+    DnsAddress     = $TargetIPs[0]
     AddressFamily  = 'IPv4'
     Description    = ''
 }
 $DscPushCH.TargetAdapter = New-TargetAdapter @chNetConfigProperties
 $nodeDefinition.Configs[1].Variables = @{
     DomainName = "DscPush.local"
-    NetworkConfig = '[
+    NetworkConfig = "[
     {
-        "SubnetBitMask":  24,
-        "DefaultGateway":  "",
-        "NetworkCategory":  "DomainAuthenticated",
-        "Alias":  "Ethernet",
-        "IPAddress":  "192.0.0.251",
-        "DNSServer":  "192.0.0.253"
+        `"SubnetBitMask`":  24,
+        `"NetworkCategory`":  `"DomainAuthenticated`",
+        `"Alias`":  `"Ethernet`",
+        `"IPAddress`"`:  `"$($TargetIPs[1])`",
+        `"DNSServer`":  `"$($TargetIPs[0])`"
     }
-]'
+]"
     JoinDomain = "true"
     ComputerName = "CH"
     ContentStore = "C:\ContentStore"
@@ -118,7 +131,36 @@ $UpdateNodeDefinitionFileParams = @{
         NodeDefinition = $nodeDefinition
         UpdateNodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\NodeDefinition.ps1"
     }
-DSCPush\Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
+Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
 #endregion
 
-. "$SetupFolder\Publish-TargetConfig.ps1" -CompilePartials -ForceResourceCopy -SanitizeModulePaths
+
+
+$publishTargetSettings = @{
+    CompilePartials                  = $true
+    SanitizeModulePaths              = $true
+    CopyContentStore                 = $true
+    ForceResourceCopy                = $true
+    DeploymentCredential             = $deploymentCredential
+    ContentStoreRootPath             = $WorkshopPath
+    ContentStoreDestPath             = $ContentStoreDestPath
+    ContentStoreModulePath           = $contentStoreModulePath
+    ContentStoreDscResourceStorePath = $contentStoreDscResourceStorePath
+    NodeDefinitionFilePath           = $nodeDefinitionFilePath
+    PartialCatalogPath               = $partialCatalogPath
+    PartialDependenciesFilePath      = $partialDependenciesFilePath
+    PartialSecretsPath               = $partialSecretsPath
+    StoredSecretsPath                = $storedSecretsPath
+    SecretsKeyPath                   = $secretsKeyPath
+    mofOutputPath                    = $mofOutputPath
+    TargetLcmSettings                = @{
+        ConfigurationModeFrequencyMins   = 15
+        RebootNodeIfNeeded               = $True
+        ConfigurationMode                = "ApplyAndAutoCorrect"
+        ActionAfterReboot                = "ContinueConfiguration"
+        RefreshMode                      = "Push"
+        AllowModuleOverwrite             = $true
+        DebugMode                        = "None"
+    }
+}
+Publish-TargetConfig @publishTargetSettings

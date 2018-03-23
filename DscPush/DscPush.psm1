@@ -1,4 +1,341 @@
-﻿<#
+﻿function Initialize-DscPush
+{
+    param
+    (
+        [Parameter()]
+        [switch]
+        $GeneratePartialCatalog,
+
+        [Parameter()]
+        [switch]
+        $GenerateSecrets,
+
+        [Parameter()]
+        [switch]
+        $GenerateNewNodeDefinitionFile,
+
+        [Parameter()]
+        [switch]
+        $UpdateNodeDefinitionFile,
+
+        [Parameter()]
+        [string]
+        $ContentStoreRootPath,
+    
+        [Parameter()]
+        [string]
+        $SettingsPath,
+
+        [Parameter()]
+        [string]
+        $PartialCatalogPath,
+    
+        [Parameter()]
+        [string]
+        $PartialStorePath,
+
+        [Parameter()]
+        [string]
+        $NodeTemplatePath,
+
+        [Parameter()]
+        [string]
+        $NodeDefinitionFilePath,
+
+        [Parameter()]
+        [string]
+        $UpdateNodeDefinitionFilePath
+    )
+
+    if ($GeneratePartialCatalog)
+    {
+        Write-Verbose "Generating Partial Catalog"
+        $NewPartialCatalogParams = @{
+            PartialStorePath = $PartialStorePath
+            PartialCatalogPath = $PartialCatalogPath
+        }
+        New-PartialCatalog @NewPartialCatalogParams
+    }
+
+    if ($GenerateSecrets)
+    {
+        Write-Verbose "Geneterating Secrets files"
+        $newSecretsFileParams = @{
+            ContentStoreRootPath = $ContentStoreRootPath
+            PartialCatalogPath = $PartialCatalogPath
+            SettingsPath = $SettingsPath
+        }
+        New-SecretsFile @newSecretsFileParams
+    }
+
+    if ($GenerateNewNodeDefinitionFile)
+    {
+        Write-Verbose "Generating New Node Definition File from template"
+        $newNodeDefinitionFileParams = @{
+            ContentStoreRootPath = $ContentStoreRootPath
+            PartialCatalogPath = $PartialCatalogPath
+            NodeTemplatePath = $NodeTemplatePath
+            NodeDefinitionFilePath = $NodeDefinitionFilePath
+        }
+        New-NodeDefinitionFile @newNodeDefinitionFileParams
+    }
+
+    if ($UpdateNodeDefinitionFile)
+    {
+        Write-Verbose "Updating Existing Node Definition File with Partial Catalog updates"
+        $UpdateNodeDefinitionFileParams = @{
+            ContentStoreRootPath = $ContentStoreRootPath
+            PartialCatalogPath = $PartialCatalogPath
+            NodeDefinitionFilePath = $NodeDefinitionFilePath
+            UpdateNodeDefinitionFilePath = $UpdateNodeDefinitionFilePath
+        }
+        Update-NodeDefinitionFile @UpdateNodeDefinitionFileParams
+    }
+}
+
+function Publish-TargetConfig
+{
+    param
+    (
+        [Parameter(Mandatory)]
+        [pscredential]
+        $DeploymentCredential,
+
+        [Parameter(Mandatory)]
+        [string]
+        $ContentStoreRootPath,
+
+        [Parameter(Mandatory)]
+        [string]
+        $ContentStoreModulePath,
+
+        [Parameter(Mandatory)]
+        [string]
+        $ContentStoreDscResourceStorePath,
+
+        [Parameter(Mandatory)]
+        [string]
+        $NodeDefinitionFilePath,
+
+        [Parameter(Mandatory)]
+        [string]
+        $PartialCatalogPath,
+
+        [Parameter(Mandatory)]
+        [string]
+        $PartialDependenciesFilePath,
+
+        [Parameter()]
+        [string]
+        $PartialSecretsPath,
+
+        [Parameter()]
+        [string]
+        $StoredSecretsPath,
+
+        [Parameter()]
+        [string]
+        $SecretsKeyPath,
+
+        [Parameter(Mandatory)]
+        [string]
+        $mofOutputPath,
+
+        [Parameter(Mandatory)]
+        [hashtable]
+        $TargetLcmSettings,
+
+        [Parameter(ParameterSetName = 'MofEncryption')]
+        [string]
+        $TargetCertDirName,
+
+        [Parameter(ParameterSetName = 'MofEncryption')]
+        [ValidatePattern("[a-f0-9]{40}")]
+        [string]
+        $MofEncryptionCertThumbprint,
+
+        [Parameter(ParameterSetName = 'MofEncryption')]
+        [string]
+        $MofEncryptionCertPath,
+
+        [Parameter(ParameterSetName = 'MofEncryption')]
+        [string]
+        $MofEncryptionPKPath,
+
+        [Parameter(ParameterSetName = 'MofEncryption')]
+        [securestring]
+        $MofEncryptionPKPassword,
+
+        [Parameter(ParameterSetName = 'MofEncryption')]
+        [switch]
+        $EnableTargetMofEncryption,
+
+        [Parameter()]
+        [switch]
+        $CompilePartials,
+    
+        [Parameter()]
+        [switch]
+        $SanitizeModulePaths,
+
+        [Parameter()]
+        [switch]
+        $CopyContentStore,
+
+        [Parameter()]
+        [string]
+        $ContentStoreDestPath,
+
+        [Parameter()]
+        [switch]
+        $ForceResourceCopy
+    )
+    #Hide Progress Bars
+    $progressPrefSetting = $ProgressPreference
+    $ProgressPreference = "SilentlyContinue"
+
+    #Import the partial catalog
+    $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
+
+    #Import the Node Definition file
+    $targetConfigs = . $NodeDefinitionFilePath
+
+    #Add dependencies and secrets to the Configs
+    $partialProperties = @{
+        PartialDependenciesFilePath = $PartialDependenciesFilePath
+        PartialSecretsPath = $PartialSecretsPath
+        StoredSecretsPath = $StoredSecretsPath
+        SecretsKeyPath = $SecretsKeyPath
+        TargetConfigs = ([ref]$targetConfigs)
+    }
+    $corePartial = Add-PartialProperties @partialProperties
+
+    #Setup Deployment Environment
+    $initializeParams = @{
+        ContentStoreRootPath = $ContentStoreRootPath
+        ContentStoreModulePath = $ContentStoreModulePath
+        ContentStoreDscResourceStorePath = $ContentStoreDscResourceStorePath
+        TargetIPList = $targetConfigs.Configs.TargetAdapter.NetworkAddress.IPAddressToString
+        DeploymentCredential = $DeploymentCredential
+        SanitizeModulePaths = $SanitizeModulePaths.IsPresent
+    }
+    $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
+
+    #Deploy Configs
+    foreach ($config in $targetConfigs.Configs)#.where({$_.configname -eq 'dscpushch'}))
+    {
+        Write-Output "Preparing Config: $($config.ConfigName)"
+
+        Write-Verbose "  Testing Connection to Target Adapter (Target IP: $($config.TargetAdapter.NetworkAddress))"
+        $targetIp = $config.TargetAdapter.NetworkAddress.IpAddressToString
+        $sessions = Connect-TargetAdapter -TargetIpAddress $targetIp -TargetAdapter $config.TargetAdapter -Credential $DeploymentCredential
+        if ($sessions -eq $false)
+        {
+            continue #skip the rest of the config if we can't connect
+        }
+
+        if ($CompilePartials.IsPresent)
+        {
+            Write-Output "  Compiling and writing Config to directory: $mofOutputPath"
+            $configParams = @{
+                TargetConfig = $config
+                ContentStoreRootPath = $ContentStoreRootPath
+                DeploymentCredential = $DeploymentCredential
+                PartialCatalog = $PartialCatalog
+                MofOutputPath = $mofOutputPath
+            }
+            Write-Config @configParams
+        }
+
+        $fileCopyList = @()
+        if ($config.ContentHost -and $CopyContentStore.IsPresent)
+        {
+            Write-Output "  Preparing Content Store for remote copy"
+            $fileCopyList += @{
+                Path=$ContentStoreRootPath
+                Destination=$ContentStoreDestPath
+            }
+        }
+
+        if ($ForceResourceCopy.IsPresent)
+        {
+            Write-Output "  Preparing required DSC Resources for remote copy"
+            $copyResourceParams = @{
+                TargetConfig = $config
+                ContentStoreDscResourceStorePath = $ContentStoreDscResourceStorePath
+                DeploymentCredential = $DeploymentCredential
+                PartialCatalog = $partialCatalog
+            }
+            $fileCopyList += Select-DscResource @copyResourceParams
+        }
+
+        if ($fileCopyList)
+        {
+            Write-Output "  Commencing remote copy of required file resources."
+            $contentCopyParams = @{
+                CopyList = $fileCopyList
+                TargetCimSession = $sessions.TargetCimSession
+                TargetPSSession = $sessions.TargetPsSession
+                Credential = $DeploymentCredential
+            }
+            Copy-RemoteContent @contentCopyParams
+        }
+
+        $targetLcmParams = $null #null the LCM settings var to accomodate for the MofEncryptionCertThumbprint key
+        if ($EnableTargetMofEncryption)
+        {
+            Write-Output "  Enabling LCM Encryption"
+            $targetMofEncryptionParams = @{
+                MofEncryptionCertThumbprint = $MofEncryptionCertThumbprint
+                CertPassword = $MofEncryptionPKPassword
+                TargetCertPath = "$($config.Variables.LocalSourceStore)\$TargetCertDirName"
+                MofEncryptionPKPath = $MofEncryptionPKPath
+                TargetPSSession = $sessions.TargetPSSession
+            }
+            Enable-TargetMofEncryption @targetMofEncryptionParams
+
+            $targetLcmParams = @{ MofEncryptionCertThumbprint = $MofEncryptionCertThumbprint }
+        }
+
+        #Set the LCM
+        Write-Output "Initializing LCM Settings"
+        $targetLcmParams += @{
+            TargetLcmSettings = $TargetLcmSettings
+            TargetConfig = $config
+            TargetCimSession = $sessions.targetCimSession
+            CorePartial = $corePartial
+            Credential = $DeploymentCredential
+            MofOutputPath = $mofOutputPath
+        }
+        Initialize-TargetLcm @targetLcmParams
+
+        #Compile and Publish the Configs
+        Write-Output "Deploying Config: $($config.ConfigName) to Target: $targetIp"
+        $configParams = @{
+            TargetConfig = $config
+            TargetCimSession = $sessions.targetCimSession
+            ContentStoreRootPath = $ContentStoreRootPath
+            DeploymentCredential = $DeploymentCredential
+            PartialCatalog = $PartialCatalog
+            MofOutputPath = $mofOutputPath
+        }
+        Send-Config @configParams
+
+        #This cmdlet now breaks baremetal deployment
+        #Start-DscConfiguration -ComputerName $targetIp -Credential $DeploymentCredential -UseExisting
+    }
+
+    #Cleanup
+    Set-Item -Path WSMan:\localhost\Client\TrustedHosts -Value $currentTrustedHost -Force
+    if($currentWinRMStatus.Status -eq 'Stopped')
+    {
+        Stop-Service WinRM -Force
+    }
+
+    $ProgressPreference = $progressPrefSetting
+}
+
+<#
     .SYNOPSIS
         Returns the parameter block of a PowerShell script.
 
@@ -559,14 +896,14 @@ function Add-PartialProperties
     return $corePartial
 }
 
-function Enable-TargetLcmEncryption
+function Enable-TargetMofEncryption
 {
     Param
     (
         [Parameter(Mandatory)]
         [ValidatePattern("[a-f0-9]{40}")]
         [String]
-        $LcmEncryptionCertThumbprint,
+        $MofEncryptionCertThumbprint,
 
         [Parameter(Mandatory)]
         [securestring]
@@ -578,7 +915,7 @@ function Enable-TargetLcmEncryption
 
         [Parameter()]
         [string]
-        $LcmEncryptionPKPath,
+        $MofEncryptionPKPath,
 
         [Parameter()]
         [System.Management.Automation.Runspaces.PSSession]
@@ -589,12 +926,12 @@ function Enable-TargetLcmEncryption
     $null = Enable-WSManCredSSP –Role Client –DelegateComputer $TargetPSSession.ComputerName -Force -ErrorAction Stop
     try
     {
-        $lcmPKName = (Get-Item -Path $LcmEncryptionPKPath -ErrorAction Stop).Name
+        $lcmPKName = (Get-Item -Path $MofEncryptionPKPath -ErrorAction Stop).Name
     }
     catch
     {
         Disable-WSManCredSSP -Role Client -ErrorAction Ignore
-        throw "Could not access Target LCM Encryption Private Key at $LcmEncryptionPKPath"
+        throw "Could not access Target LCM Encryption Private Key at $MofEncryptionPKPath"
     }
     #endregion
 
@@ -619,7 +956,7 @@ function Enable-TargetLcmEncryption
                     $remoteDir = Get-Item -Path $using:TargetCertPath -ErrorAction Ignore
                     if (! $remoteDir) { $null = New-Item -ItemType Directory -Path $using:TargetCertPath -ErrorAction Continue }
                 }
-                Copy-Item -Path $LcmEncryptionPKPath -Destination $remotePKPath -ToSession $TargetPSSession -Force -ErrorAction Stop
+                Copy-Item -Path $MofEncryptionPKPath -Destination $remotePKPath -ToSession $TargetPSSession -Force -ErrorAction Stop
             }
             catch
             {
@@ -632,7 +969,7 @@ function Enable-TargetLcmEncryption
 
     #region import PK
     $null = Invoke-Command {
-        $certImported = Test-Path -Path "Cert:\LocalMachine\My\$using:LcmEncryptionCertThumbprint"
+        $certImported = Test-Path -Path "Cert:\LocalMachine\My\$using:MofEncryptionCertThumbprint"
         if (! $certImported)
         {
             try
@@ -684,11 +1021,11 @@ function Copy-RemoteContent
         
         [Parameter(Mandatory = $true)]
         [CimSession]
-        $targetCimSession,
+        $TargetCimSession,
 
         [Parameter(Mandatory = $true)]
         [System.Management.Automation.Runspaces.PSSession]
-        $targetPSSession,
+        $TargetPSSession,
 
         [Parameter(Mandatory = $true)]
         [PSCredential]
@@ -1038,6 +1375,51 @@ function Write-Config
     }
 }
 
+<# Er...don't use this for now #>
+function Copy-DscPartial
+{
+    param
+    (
+        [parameter(Mandatory)]
+        $TargetConfig,
+
+        [Parameter()]
+        [string]
+        $ContentStoreDscPartialStorePath,
+
+        [Parameter()]
+        [pscredential]
+        $DeploymentCredential,
+
+        [Parameter()]
+        [DscPartial[]]
+        $PartialCatalog
+    )
+    
+    #Import PartialCatalog
+    #$targetPartials = $PartialCatalog.where({$_.Name -in $TargetConfig.RoleList})
+
+    #Point to C:\Program Files\WindowsPowerShell\Modules
+    $partialStorePath = Join-Path -Path $TargetConfig.variables.LocalSourceStore -ChildPath "DscPartials"
+
+    
+    #$session = New-PSSession -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential
+    #foreach ($partial in $targetPartials)
+    #{
+        $copyPartialParams = @{
+            Path=$ContentStoreDscPartialStorePath
+            Destination=$partialStorePath
+            Target=$TargetConfig.TargetIP
+            Credential=$DeploymentCredential
+        }
+
+        Copy-RemoteContent @copyPartialParams
+        
+        #$null = Copy-Item -Path "$ContentStoreDscResourceStorePath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
+    #}
+    #$null = Remove-PSSession -Session $session
+}
+
 function Select-DscResource
 {
     param
@@ -1098,10 +1480,10 @@ function Initialize-TargetLcm
         [string]
         $CorePartial,
 
-        [Parameter(ParameterSetName = 'LcmEncryption')]
+        [Parameter(ParameterSetName = 'MofEncryption')]
         [ValidatePattern("[a-f0-9]{40}")]
         [string]
-        $LcmEncryptionCertThumbprint,
+        $MofEncryptionCertThumbprint,
 
         [parameter()]
         [pscredential]
@@ -1127,11 +1509,11 @@ function Initialize-TargetLcm
     {
         Node $targetIP
         {
-            if ($LcmEncryptionCertThumbprint)
+            if ($MofEncryptionCertThumbprint)
             {
                 Settings
                 {
-                    CertificateId = $LcmEncryptionCertThumbprint
+                    CertificateId = $MofEncryptionCertThumbprint
                     RebootNodeIfNeeded = $TargetLcmSettings.RebootNodeIfNeeded
                     ConfigurationModeFrequencyMins = $TargetLcmSettings.ConfigurationModeFrequencyMins
                     ConfigurationMode = $TargetLcmSettings.ConfigurationMode
@@ -1424,6 +1806,7 @@ function Update-NodeDefinitionFile
 }
 
 #region Class Definitions
+
 Class DscPartial
 {
     [string]
