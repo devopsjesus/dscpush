@@ -19,6 +19,7 @@
 1. Run WorkshopStep2.ps1 on your workstation.
    - Credential pop-up is to store the protected property values (i.e. secrets).  The workshop only require a single credential, because the same one is used for both VMs. The credential being stored is for domain admin.
    - The second credential pop-up is to kick-off the Configuration Deployment.  The same credential is used to keep it simple for both cases (local and domain admin).
+   - Sometimes Hyper-V will name the connected adapter "Ethernet 2" instead of "Ethernet" at times, so if you get a warning that looks like this - "WARNING: InterfaceAlias not found on target: 192.0.0.245. Skipping target..." - just rename the $AdapterAlias parameter and rerun the script.
 
 # What's going on?
 
