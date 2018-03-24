@@ -7,7 +7,7 @@ param(
 
     $HostIpAddress = "192.0.0.247",
     
-    $DnsServer = "192.0.0.253",
+    $DnsServer = "192.0.0.245",
 
 	[parameter(mandatory)]
     [pscredential]
@@ -20,8 +20,8 @@ param(
     [switch]$Clobber,
     
     $VmList = @(
-        @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-E9-10'; VmMemory = 1024MB }
-        @{TargetItemName = 'DscPushCH'; TargetIP = '192.0.0.251'; MacAddress = '00-15-5d-36-E9-11'; VmMemory = 1024MB }
+        @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-F1-10'; VmMemory = 1024MB }
+        @{TargetItemName = 'DscPushCH'; TargetIP = '192.0.0.246'; MacAddress = '00-15-5d-36-F1-11'; VmMemory = 1024MB }
     )
 )
 
@@ -110,7 +110,7 @@ elseif($currentTrustedHost -ne '*')
 $switch = Get-VMSwitch $VSwitchName -ErrorAction Ignore
 if (!($switch))
 {
-    New-VMSwitch $VSwitchName -SwitchType Internal
+    $null = New-VMSwitch $VSwitchName -SwitchType Internal
 }
 
 #Set host IP for pre-build
@@ -118,15 +118,15 @@ $localIPList = Get-NetIPAddress
 $targetNIC = Get-NetAdapter -Name "vEthernet ($VSwitchName)"
 if ($localIPList.IPAddress -notcontains $HostIpAddress)
 {
-    New-NetIPAddress –IPAddress $HostIpAddress –PrefixLength 24 -InterfaceIndex $targetNIC.ifIndex -ErrorAction Ignore
-    Set-NetIPAddress –IPAddress $HostIpAddress –PrefixLength 24 -InterfaceIndex $targetNIC.ifIndex -ErrorAction Ignore 
+    $null = New-NetIPAddress –IPAddress $HostIpAddress –PrefixLength 24 -InterfaceIndex $targetNIC.ifIndex -ErrorAction Ignore
+    $null = Set-NetIPAddress –IPAddress $HostIpAddress –PrefixLength 24 -InterfaceIndex $targetNIC.ifIndex -ErrorAction Ignore 
 
 }
 
 #Set host network adapter/switch to enabled
 if ($targetNIC.Status -eq 'Disabled') 
 { 
-    Enable-NetAdapter -InputObject $targetNIC -Confirm:$false 
+    $null = Enable-NetAdapter -InputObject $targetNIC -Confirm:$false 
 }
 #endregion
 

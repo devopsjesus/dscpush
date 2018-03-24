@@ -4,11 +4,15 @@ param
 (
     [Parameter()]
     [string]
-    $GithubDownloadUrl = "https://github.com/devopsjesus/dscpush/archive/master.zip",
+    $BranchName = "AddFeatures",
 
     [Parameter()]
     [string]
-    $DscPushModulePath = "$env:USERPROFILE\Documents\dscpush-master.zip",
+    $GithubDownloadUrl = "http://github.com/devopsjesus/dscpush/archive/$BranchName.zip",
+
+    [Parameter()]
+    [string]
+    $DscPushModulePath = "$env:USERPROFILE\Documents\dscpush-$BranchName.zip",
 
     [Parameter()]
     [string]
@@ -33,23 +37,29 @@ $currentDir = (Get-Item .).FullName
 
 #Download DscPush from GitHub and copy to $WorkshopPath
 Write-Verbose "Downloading repo from GitHub and extracting to C:\DscPushWorkshop"
-$null = Invoke-WebRequest -Uri $GithubDownloadUrl -OutFile $DscPushModulePath
+
+#Requires -module BitsTransfer
+Start-BitsTransfer -Source $GithubDownloadUrl -Destination $DscPushModulePath
+
+#$wc = New-Object System.Net.WebClient
+#$wc.DownloadFile($GithubDownloadUrl, $DscPushModulePath)
+#$null = Invoke-WebRequest -Uri $GithubDownloadUrl -OutFile $DscPushModulePath
 Expand-Archive $DscPushModulePath -DestinationPath $WorkshopPath -Force
-Copy-Item -Path "$WorkshopPath\dscpush-master\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force -ErrorAction Stop
+Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force -ErrorAction Stop
 
 #Copy DscPush module to Modules folder
 Write-Verbose "Copying module to workshop Modules folder"
 $null = New-Item -Path "$WorkshopPath\Modules" -ItemType Directory -Force
-Copy-Item -Path "$WorkshopPath\dscpush-master\DSCPush" -Destination "$WorkshopPath\Modules" -Force -Recurse -ErrorAction Stop
+Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\DSCPush" -Destination "$WorkshopPath\Modules" -Force -Recurse -ErrorAction Stop
 
 #Copy SamplePartials to Partials folder
 Write-Verbose "Copying partials to Partials folder"
 $null = New-Item -Path "$WorkshopPath\Partials" -ItemType Directory -Force
-Copy-Item -Path "$WorkshopPath\dscpush-master\SamplePartials\*" -Destination "$WorkshopPath\Partials" -Force -Recurse -ErrorAction Stop
+Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\SamplePartials\*" -Destination "$WorkshopPath\Partials" -Force -Recurse -ErrorAction Stop
 
 #Remove GitHub source directory
 Write-Verbose "Deleting extracted repo directory"
-Remove-Item -Path "$workshopPath\dscpush-master" -Recurse -Force
+Remove-Item -Path "$workshopPath\dscpush-$BranchName" -Recurse -Force
 
 #Install and configure required DSC Resources
 Write-Verbose "Downloading and installing required DSC Resources"
