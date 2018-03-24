@@ -32,7 +32,7 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
 ## Process Flow
 
 1. Generate your Partial Configuration Catalog 
-   - Run $\DscPushSetup\Initialize-DscPush.ps1 -GeneratePartialCatalog
+   - Run Initialize-DscPush -GeneratePartialCatalog
 2. Populate Node Template File ($\DscPushSetup\Settings\NodeTemplate.ps1)
    - Edit Node and Config properties to match infrastructure
      - ConfigName
@@ -40,7 +40,7 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
      - ContentHost
      - RoleList (List of partials that apply to the Config)
 3. Generate your Node Definition File
-   - Run $\DscPushSetup\Initialize-DscPush.ps1 -GenerateNewNodeDefinitionFile -NodeDefinitionFilePath $filePath
+   - Run Initialize-DscPush -GenerateNewNodeDefinitionFile -NodeDefinitionFilePath $filePath
      - Inputs
        - Partial Catalog Path (Generated in Step 1.)
        - Node Template File Path (Edited in Step 2.)
@@ -48,7 +48,7 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
      - Outputs
        - Node Definition File
 4. Securely store credentials required by partials
-   - Run $\DscPushSetup\Initialize-DscPush.ps1 -GenerateSecrets
+   - Run Initialize-DscPush -GenerateSecrets
      - Inputs
        - Node Definition File Path (Generated in Step 3 and modified in Step 4)
      - Outputs
@@ -57,7 +57,7 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
 5. Edit Node Definition File
    - Replace all instances of “ENTER_VALUE_HERE” with appropriate target config values.
 6. Publish the Node Definitions (Configs with values stored in Node Definition File)
-   - Run $\DscPushSetup\Publish-RpsConfiguration.ps1
+   - Run Publish-RpsConfiguration
 
 
 # Lexicon
