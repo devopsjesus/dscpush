@@ -4,7 +4,7 @@ param
 (
     [Parameter()]
     [string]
-    $BranchName = "AddFeatures",
+    $BranchName = "master",
 
     [Parameter()]
     [string]
