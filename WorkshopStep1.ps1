@@ -66,7 +66,14 @@ Write-Verbose "Downloading and installing required DSC Resources"
 $null = New-Item -Path "$WorkshopPath\Resources" -ItemType Directory -Force -ErrorAction Stop
 $RequiredDscResources.ForEach({
     Write-Verbose "Installing Module $_"
-    Install-Module $_ -Force
-    $null = New-Item -Path "$WorkshopPath\Resources\$_" -ItemType Directory -Force
-    Copy-Item -Path "C:\Program Files\WindowsPowerShell\Modules\$_\*" -Destination "$WorkshopPath\Resources\$_" -Recurse -Force -ErrorAction Stop
+
+    Write-Verbose "Sanitizing PSModulePath of existing Modules because of versioning weirdnesses."
+    $psModulePaths = $env:PSModulePath.Split(";")
+        foreach ($psModulePath in $psModulePaths)
+        {
+            Remove-Item -Path "$psModulePath\$_" -Recurse -Force -ErrorAction Ignore
+        }
+
+    Write-Verbose "Saving Module ($_) to $WorkshopPath\Resources"
+    Save-Module -Name $_ -Path "$WorkshopPath\Resources" -Force
 })

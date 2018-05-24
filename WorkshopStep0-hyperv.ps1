@@ -5,9 +5,9 @@ param(
 
     $VSwitchName = "DscPush-vSwitch1",
 
-    $HostIpAddress = "192.0.0.247",
+    $HostIpAddress = "192.0.0.235",
     
-    $DnsServer = "192.0.0.245",
+    $DnsServer = "192.0.0.236",
 
 	[parameter(mandatory)]
     [pscredential]
@@ -20,8 +20,8 @@ param(
     [switch]$Clobber,
     
     $VmList = @(
-        @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-F1-10'; VmMemory = 1024MB }
-        @{TargetItemName = 'DscPushCH'; TargetIP = '192.0.0.246'; MacAddress = '00-15-5d-36-F1-11'; VmMemory = 1024MB }
+        @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-F2-10'; VmMemory = 1024MB }
+        @{TargetItemName = 'DscPushCH'; TargetIP = '192.0.0.237'; MacAddress = '00-15-5d-36-F2-11'; VmMemory = 1024MB }
     )
 )
 
