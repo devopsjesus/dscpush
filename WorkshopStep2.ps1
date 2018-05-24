@@ -20,7 +20,7 @@ param
 
     [Parameter()]
     [array]
-    $TargetIPs = @("192.0.0.245","192.0.0.246"),
+    $TargetIPs = @("192.0.0.236","192.0.0.237"),
 
     [Parameter()]
     [string]
