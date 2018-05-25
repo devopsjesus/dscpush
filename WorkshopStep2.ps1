@@ -92,7 +92,7 @@ $nodeDefinition.Configs[0].Variables = @{
     {
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
-        `"MACAddress`":  `"00-15-5d-36-F2-10`",
+        `"MACAddress`":  `"$($TargetVMs[0].PhysicalAddress)`",
         `"IPAddress`"`:  `"$($TargetVMs[0].IP)`",
         `"DNSServer`":  `"$($TargetVMs[0].IP)`"
     }
@@ -117,7 +117,7 @@ $nodeDefinition.Configs[1].Variables = @{
     {
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
-        `"MACAddress`":  `"00-15-5d-36-F2-11`",
+        `"MACAddress`":  `"$($TargetVMs[1].PhysicalAddress)`",
         `"IPAddress`"`:  `"$($TargetVMs[1].IP)`",
         `"DNSServer`":  `"$($TargetVMs[0].IP)`"
     }

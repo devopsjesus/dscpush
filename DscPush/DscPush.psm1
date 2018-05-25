@@ -746,24 +746,26 @@ function Export-NodeDefinitionFile
             if ($targetAdapter)
             {
                 $dataFileContents += "`$${configName}AdapterProperties = @{$crlf"
-                $dataFileContents += "    InterfaceAlias = '$($targetAdapter.InterfaceAlias)'$crlf"
-                $dataFileContents += "    NetworkAddress = '$($targetAdapter.NetworkAddress)'$crlf"
-                $dataFileContents += "    SubnetBits     = '$($targetAdapter.SubnetBits)'$crlf"
-                $dataFileContents += "    DnsAddress     = '$($targetAdapter.DnsAddress)'$crlf"
-                $dataFileContents += "    AddressFamily  = '$($targetAdapter.AddressFamily)'$crlf"
-                $dataFileContents += "    Description    = '$($targetAdapter.Description)'$crlf"
+                $dataFileContents += "    InterfaceAlias  = '$($targetAdapter.InterfaceAlias)'$crlf"
+                $dataFileContents += "    PhysicalAddress = '$($targetAdapter.PhysicalAddress)'$crlf"
+                $dataFileContents += "    NetworkAddress  = '$($targetAdapter.NetworkAddress)'$crlf"
+                $dataFileContents += "    SubnetBits      = '$($targetAdapter.SubnetBits)'$crlf"
+                $dataFileContents += "    DnsAddress      = '$($targetAdapter.DnsAddress)'$crlf"
+                $dataFileContents += "    AddressFamily   = '$($targetAdapter.AddressFamily)'$crlf"
+                $dataFileContents += "    Description     = '$($targetAdapter.Description)'$crlf"
                 $dataFileContents += "}$crlf"
                 $dataFileContents += "`$$ConfigName.TargetAdapter = New-TargetAdapter @${configName}AdapterProperties$crlf"
             }
             else
             {
                 $dataFileContents += "`$${configName}AdapterProperties = @{$crlf"
-                $dataFileContents += "    InterfaceAlias = 'ENTER_VALUE_HERE'$crlf"
-                $dataFileContents += "    NetworkAddress = 'ENTER_VALUE_HERE'$crlf"
-                $dataFileContents += "    SubnetBits     = 'ENTER_VALUE_HERE'$crlf"
-                $dataFileContents += "    DnsAddress     = 'ENTER_VALUE_HERE'$crlf"
-                $dataFileContents += "    AddressFamily  = 'ENTER_VALUE_HERE'$crlf"
-                $dataFileContents += "    Description    = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    InterfaceAlias  = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    PhysicalAddress = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    NetworkAddress  = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    SubnetBits      = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    DnsAddress      = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    AddressFamily   = 'ENTER_VALUE_HERE'$crlf"
+                $dataFileContents += "    Description     = 'ENTER_VALUE_HERE'$crlf"
                 $dataFileContents += "}$crlf"
                 $dataFileContents += "`$$ConfigName.TargetAdapter = New-TargetAdapter @${configName}AdapterProperties$crlf"
             }
@@ -1272,7 +1274,7 @@ function Connect-TargetAdapter
     }
 
     #Ensure MAC or Alias of the config's target adapter match the actual target's adapter
-    if ("PhysicalAddress" -in $TargetAdapter)
+    if (! [string]::IsNullOrEmpty($TargetAdapter.PhysicalAddress))
     {
         if ($TargetAdapter.PhysicalAddress -notin $retrievedIpConfig.NetAdapter.LinkLayerAddress)
         {
