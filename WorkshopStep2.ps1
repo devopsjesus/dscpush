@@ -33,10 +33,7 @@ param
 $ProgressPreference = "SilentlyContinue"
 
 #region Modules
-if (Get-Module DscPush)
-{
-    Remove-Module DscPush
-}
+Get-Module DscPush | Remove-Module DscPush
 Import-Module -FullyQualifiedName $DSCPushModulePath
 #endregion Modules
 
