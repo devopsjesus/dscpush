@@ -33,8 +33,6 @@ $ProgressPreference = "SilentlyContinue"
 Write-Verbose "Creating root workshop directory"
 $null = New-Item -Path $WorkshopPath -ItemType Directory -Force -ErrorAction Stop
 
-$currentDir = (Get-Item .).FullName
-
 #Download DscPush from GitHub and copy to $WorkshopPath
 Write-Verbose "Downloading repo from GitHub and extracting to C:\DscPushWorkshop"
 
