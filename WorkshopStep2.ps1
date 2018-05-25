@@ -3,6 +3,10 @@
 param
 (
     [Parameter()]
+    [pscredential]
+    $DeploymentCredential = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
+
+    [Parameter()]
     [string]
     $WorkshopPath = "C:\DscPushWorkshop",
 
@@ -20,11 +24,10 @@ param
 
     [Parameter()]
     [array]
-    $TargetIPs = @("192.0.0.236","192.0.0.237"),
-
-    [Parameter()]
-    [string]
-    $AdapterAlias = "Ethernet"
+    $TargetVMs = @(
+        @{ IP="192.0.0.236"; PhysicalAddress="00-15-5d-36-F2-10" }
+        @{ IP="192.0.0.237"; PhysicalAddress="00-15-5d-36-F2-11" }
+    )
 )
 
 $ProgressPreference = "SilentlyContinue"
@@ -42,7 +45,7 @@ $NodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\workshop.p
 
 $currentDir = (Get-Item .).FullName
 
-foreach ($vm in $TargetIps)
+foreach ($vm in $TargetVMs.IP)
 {
     try
     {
@@ -59,7 +62,6 @@ foreach ($vm in $TargetIps)
 #default vars
 $partialCatalogPath               = "$WorkshopPath\DSCPushSetup\Settings\PartialCatalog.json"
 $partialStorePath                 = "$WorkshopPath\Partials"
-$deploymentCredential             = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force)))
 $ContentStoreDestPath             = $WorkshopPath
 $contentStoreModulePath           = "$WorkshopPath\Modules"
 $contentStoreDscResourceStorePath = "$WorkshopPath\Resources"
@@ -80,12 +82,12 @@ Initialize-DscPush -GenerateNewNodeDefinitionFile -SettingsPath $SettingsPath -N
 $nodeDefinition = . $NodeDefinitionFilePath
 
 $adNetConfigProperties = @{
-    InterfaceAlias = $AdapterAlias
-    NetworkAddress = $TargetIPs[0]
-    SubnetBits     = '24'
-    DnsAddress     = $TargetIPs[0]
-    AddressFamily  = 'IPv4'
-    Description    = ''
+    PhysicalAddress = $TargetVMs[0].PhysicalAddress
+    NetworkAddress  = $TargetVMs[0].IP
+    SubnetBits      = '24'
+    DnsAddress      = $TargetVMs[0].IP
+    AddressFamily   = 'IPv4'
+    Description     = ''
 }
 $DscPushAD.TargetAdapter = New-TargetAdapter @adNetConfigProperties
 
@@ -95,9 +97,9 @@ $nodeDefinition.Configs[0].Variables = @{
     {
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
-        `"Alias`":  `"$AdapterAlias`",
-        `"IPAddress`"`:  `"$($TargetIPs[0])`",
-        `"DNSServer`":  `"$($TargetIPs[0])`"
+        `"MACAddress`":  `"00-15-5d-36-F2-10`",
+        `"IPAddress`"`:  `"$($TargetVMs[0].IP)`",
+        `"DNSServer`":  `"$($TargetVMs[0].IP)`"
     }
 ]"
     JoinDomain = "false"
@@ -106,10 +108,10 @@ $nodeDefinition.Configs[0].Variables = @{
 }
 
 $chNetConfigProperties = @{
-    InterfaceAlias = $AdapterAlias
-    NetworkAddress = $TargetIPs[1]
+    PhysicalAddress = $TargetVMs[1].PhysicalAddress
+    NetworkAddress = $TargetVMs[1].IP
     SubnetBits     = '24'
-    DnsAddress     = $TargetIPs[0]
+    DnsAddress     = $TargetVMs[1].IP
     AddressFamily  = 'IPv4'
     Description    = ''
 }
@@ -120,9 +122,9 @@ $nodeDefinition.Configs[1].Variables = @{
     {
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
-        `"Alias`":  `"$AdapterAlias`",
-        `"IPAddress`"`:  `"$($TargetIPs[1])`",
-        `"DNSServer`":  `"$($TargetIPs[0])`"
+        `"MACAddress`":  `"00-15-5d-36-F2-11`",
+        `"IPAddress`"`:  `"$($TargetVMs[1].IP)`",
+        `"DNSServer`":  `"$($TargetVMs[0].IP)`"
     }
 ]"
     JoinDomain = "true"
@@ -138,14 +140,12 @@ $UpdateNodeDefinitionFileParams = @{
 Export-NodeDefinitionFile @UpdateNodeDefinitionFileParams
 #endregion
 
-#dscpush\Initialize-DeploymentEnvironment -SanitizeModulePaths -ContentStoreRootPath $WorkshopPath -
-
 $publishTargetSettings = @{
     CompilePartials                  = $true
     SanitizeModulePaths              = $true
     CopyContentStore                 = $true
     ForceResourceCopy                = $true
-    DeploymentCredential             = $deploymentCredential
+    DeploymentCredential             = $DeploymentCredential
     ContentStoreRootPath             = $WorkshopPath
     ContentStoreDestPath             = $ContentStoreDestPath
     ContentStoreModulePath           = $contentStoreModulePath

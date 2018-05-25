@@ -177,7 +177,7 @@ workflow ConfigureVM
                 }
                 else
                 {
-                    Write-Output "VM $vmName already exists, and Clobber was not specified.  Skipping VM."
+                    Write-Output "VHD for VM $vmName already exists, and Clobber was not specified.  Skipping VM VHD creation."
                 }
 		    }
             else
