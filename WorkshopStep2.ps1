@@ -40,8 +40,6 @@ Import-Module -FullyQualifiedName $DSCPushModulePath
 $null = New-Item -Path "$SetupFolder\DefinitionStore"-ItemType Directory -Force
 $NodeDefinitionFilePath = "$WorkshopPath\DscPushSetup\DefinitionStore\workshop.ps1"
 
-$currentDir = (Get-Item .).FullName
-
 foreach ($vm in $TargetVMs.IP)
 {
     try
