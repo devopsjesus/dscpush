@@ -2,9 +2,9 @@
 
 param
 (
-    [Parameter()]
+    [Parameter(Mandatory)]
     [pscredential]
-    $DeploymentCredential = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
+    $DeploymentCredential,
 
     [Parameter()]
     [string]
