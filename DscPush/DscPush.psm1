@@ -194,13 +194,13 @@ function Publish-TargetConfig
     $progressPrefSetting = $ProgressPreference
     $ProgressPreference = "SilentlyContinue"
 
-    #Import the partial catalog
+    Write-Verbose "Import the partial catalog"
     $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
 
-    #Import the Node Definition file
+    Write-Verbose "Import the Node Definition file"
     $targetConfigs = . $NodeDefinitionFilePath
 
-    #Add dependencies and secrets to the Configs
+    Write-Verbose "Add dependencies and secrets to the Configs"
     $partialProperties = @{
         PartialDependenciesFilePath = $PartialDependenciesFilePath
         PartialSecretsPath = $PartialSecretsPath
@@ -210,7 +210,7 @@ function Publish-TargetConfig
     }
     $corePartial = Add-PartialProperties @partialProperties
 
-    #Setup Deployment Environment
+    Write-Verbose "Setup Deployment Environment"
     $initializeParams = @{
         ContentStoreRootPath = $ContentStoreRootPath
         ContentStoreModulePath = $ContentStoreModulePath
@@ -221,7 +221,7 @@ function Publish-TargetConfig
     }
     $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
-    #Deploy Configs
+    Write-Verbose "Deploy Configs"
     foreach ($config in $targetConfigs.Configs)#.where({$_.configname -eq 'dscpushch'}))
     {
         Write-Output "Preparing Config: $($config.ConfigName)"
@@ -1207,19 +1207,22 @@ function Initialize-DeploymentEnvironment
         Start-Service "WinRM" -Confirm:$false -ErrorAction Stop
     }
 
-    # Add the IP list of the target VMs to the trusted host list
+    Write-Verbose "Add the IP list of the target VMs ($TargetIPList) to the trusted host list"
     $currentTrustedHost = (Get-Item "WSMan:\localhost\Client\TrustedHosts").Value
     if(($currentTrustedHost -ne '*') -and ([string]::IsNullOrEmpty($currentTrustedHost) -eq $false))
     {
         $scriptTrustedHost = @($currentTrustedHost,$($TargetIPList -join ", ")) -join ", "
+        Write-Verbose "Setting Trusted Hosts List to: $scriptTrustedHost"
         Set-Item -Path "WSMan:\localhost\Client\TrustedHosts" -Value $scriptTrustedHost -Force
     }
     elseif($currentTrustedHost -ne '*')
     {
         $scriptTrustedHost = $TargetIPList -join ", "
+        Write-Verbose "Setting Trusted Hosts List to: $scriptTrustedHost"
         Set-Item -Path "WSMan:\localhost\Client\TrustedHosts" -Value $scriptTrustedHost -Force
     }
 
+    Write-Verbose "Return current Trusted Hosts list so we can reset to that after publishing."
     return $currentTrustedHost
 }
 
