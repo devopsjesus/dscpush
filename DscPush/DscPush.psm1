@@ -239,7 +239,7 @@ function Publish-TargetConfig
             Credential            = $DeploymentCredential
             CertificateThumbprint = $RemoteAuthCertThumbprint
         }
-        $sessions = Connect-TargetAdapter $connectParams
+        $sessions = Connect-TargetAdapter @connectParams
         if ($sessions -eq $false)
         {
             continue #skip the rest of the config if we can't connect
