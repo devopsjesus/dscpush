@@ -101,6 +101,11 @@ function Publish-TargetConfig
         [pscredential]
         $DeploymentCredential,
 
+        [parameter()]
+        [ValidatePattern("[a-f0-9]{40}")]
+        [string]
+        $RemoteAuthCertThumbprint,
+
         [Parameter(Mandatory)]
         [string]
         $ContentStoreRootPath,
@@ -228,7 +233,13 @@ function Publish-TargetConfig
 
         Write-Verbose "  Testing Connection to Target Adapter (Target IP: $($config.TargetAdapter.NetworkAddress))"
         $targetIp = $config.TargetAdapter.NetworkAddress.IpAddressToString
-        $sessions = Connect-TargetAdapter -TargetIpAddress $targetIp -TargetAdapter $config.TargetAdapter -Credential $DeploymentCredential
+        $connectParams = @{
+            TargetIpAddress       = $targetIp
+            TargetAdapter         = $config.TargetAdapter
+            Credential            = $DeploymentCredential
+            CertificateThumbprint = $RemoteAuthCertThumbprint
+        }
+        $sessions = Connect-TargetAdapter $connectParams
         if ($sessions -eq $false)
         {
             continue #skip the rest of the config if we can't connect
@@ -1238,9 +1249,18 @@ function Connect-TargetAdapter
         [TargetAdapter]
         $TargetAdapter,
         
-        [parameter(Mandatory)]
+        [parameter()]
         [pscredential]
-        $Credential
+        $Credential,
+
+        [parameter()]
+        [ValidatePattern("[a-f0-9]{40}")]
+        [string]
+        $CertificateThumbprint,
+
+        [parameter()]
+        [System.Management.Automation.Remoting.PSSessionOption]
+        $SessionOption = (New-PSSessionOption -SkipCACheck -SkipCNCheck -SkipRevocationCheck)
     )
 
     #Try to reach the target first
@@ -1257,8 +1277,18 @@ function Connect-TargetAdapter
 
     try
     {
-        $targetCimSession = New-CimSession -ComputerName $TargetIpAddress -Credential $Credential -ErrorAction Stop
-        $targetPSSession = New-PSSession -ComputerName $TargetIpAddress -Credential $Credential -ErrorAction Stop
+        if ($CertificateThumbprint)
+        {
+            Write-Verbose "Establishing sessions with Certificate"
+            $targetCimSession = New-CimSession -CertificateThumbprint $CertificateThumbprint -SessionOption $Sessoption
+            $targetPSSession = New-PSSession -CertificateThumbprint $CertificateThumbprint -SessionOption $SessionOption
+        }
+        elseif ($Credential)
+        {
+            Write-Verbose "Establishing sessions with Credential"
+            $targetCimSession = New-CimSession -ComputerName $TargetIpAddress -Credential $Credential -ErrorAction Stop
+            $targetPSSession = New-PSSession -ComputerName $TargetIpAddress -Credential $Credential -ErrorAction Stop
+        }
     }
     catch
     {

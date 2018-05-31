@@ -6,6 +6,11 @@ param
     [pscredential]
     $DeploymentCredential,
 
+    [parameter()]
+    [ValidatePattern("[a-f0-9]{40}")]
+    [string]
+    $RemoteAuthCertThumbprint,
+
     [Parameter()]
     [string]
     $WorkshopPath = "C:\DscPushWorkshop",
@@ -145,6 +150,7 @@ $publishTargetSettings = @{
     CopyContentStore                 = $true
     ForceResourceCopy                = $true
     DeploymentCredential             = $DeploymentCredential
+    RemoteAuthCertThumbprint         = $RemoteAuthCertThumbprint
     ContentStoreRootPath             = $WorkshopPath
     ContentStoreDestPath             = $ContentStoreDestPath
     ContentStoreModulePath           = $contentStoreModulePath
