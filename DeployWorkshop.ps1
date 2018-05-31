@@ -1,5 +1,4 @@
-﻿#requires -RunAsAdministrator 
-#requires -Module Pester
+﻿#requires -RunAsAdministrator
 
 param(
     $Credential = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
