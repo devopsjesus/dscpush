@@ -166,4 +166,4 @@ $publishTargetSettings = @{
         DebugMode                        = "None"
     }
 }
-Publish-TargetConfig @publishTargetSettings
+Publish-TargetConfig @publishTargetSettings -Verbose
