@@ -13,7 +13,7 @@ param
 
     [Parameter()]
     [string]
-    $DscPushModulePath = "$env:USERPROFILE\Documents\dscpush-$BranchName.zip",
+    $DscPushModulePath = "C:\Windows\Temp\dscpush-$BranchName.zip",
 
     [Parameter()]
     [string]
