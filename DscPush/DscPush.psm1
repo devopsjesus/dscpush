@@ -1279,7 +1279,7 @@ function Connect-TargetAdapter
     {
         if ($CertificateThumbprint)
         {
-            Write-Verbose "Establishing sessions with Certificate"
+            Write-Verbose "Establishing sessions with Certificate $CertificateThumbprint"
             $targetCimSession = New-CimSession -CertificateThumbprint $CertificateThumbprint -SessionOption $SessionOption
             $targetPSSession = New-PSSession -CertificateThumbprint $CertificateThumbprint -SessionOption $SessionOption
         }
