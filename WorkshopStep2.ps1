@@ -78,6 +78,7 @@ $nodeDefinition = . $NodeDefinitionFilePath
 
 $adNetConfigProperties = @{
     PhysicalAddress = $TargetVMs[0].PhysicalAddress
+    InterfaceAlias  = $TargetVMs[0].InterfaceAlias
     NetworkAddress  = $TargetVMs[0].IP
     SubnetBits      = '24'
     DnsAddress      = $TargetVMs[0].IP
@@ -93,6 +94,7 @@ $nodeDefinition.Configs[0].Variables = @{
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
         `"MACAddress`":  `"$($TargetVMs[0].PhysicalAddress)`",
+        `"InterfaceAlias`":  `"$($TargetVMs[0].InterfaceAlias)`",
         `"IPAddress`"`:  `"$($TargetVMs[0].IP)`",
         `"DNSServer`":  `"$($TargetVMs[0].IP)`"
     }
@@ -104,11 +106,12 @@ $nodeDefinition.Configs[0].Variables = @{
 
 $chNetConfigProperties = @{
     PhysicalAddress = $TargetVMs[1].PhysicalAddress
-    NetworkAddress = $TargetVMs[1].IP
-    SubnetBits     = '24'
-    DnsAddress     = $TargetVMs[1].IP
-    AddressFamily  = 'IPv4'
-    Description    = ''
+    InterfaceAlias  = $TargetVMs[1].InterfaceAlias
+    NetworkAddress  = $TargetVMs[1].IP
+    SubnetBits      = '24'
+    DnsAddress      = $TargetVMs[1].IP
+    AddressFamily   = 'IPv4'
+    Description     = ''
 }
 $DscPushCH.TargetAdapter = New-TargetAdapter @chNetConfigProperties
 $nodeDefinition.Configs[1].Variables = @{
@@ -118,6 +121,7 @@ $nodeDefinition.Configs[1].Variables = @{
         `"SubnetBitMask`":  24,
         `"NetworkCategory`":  `"DomainAuthenticated`",
         `"MACAddress`":  `"$($TargetVMs[1].PhysicalAddress)`",
+        `"InterfaceAlias`":  `"$($TargetVMs[1].InterfaceAlias)`",
         `"IPAddress`"`:  `"$($TargetVMs[1].IP)`",
         `"DNSServer`":  `"$($TargetVMs[0].IP)`"
     }

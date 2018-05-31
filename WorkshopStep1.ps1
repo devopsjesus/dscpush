@@ -34,16 +34,15 @@ Write-Verbose "Creating root workshop directory"
 $null = New-Item -Path $WorkshopPath -ItemType Directory -Force -ErrorAction Stop
 
 #Download DscPush from GitHub and copy to $WorkshopPath
-Write-Verbose "Downloading repo from GitHub and extracting to C:\DscPushWorkshop"
-
+#Write-Verbose "Downloading repo from GitHub and extracting to C:\DscPushWorkshop"
 #Requires -module BitsTransfer
-Start-BitsTransfer -Source $GithubDownloadUrl -Destination $DscPushModulePath
+#Start-BitsTransfer -Source $GithubDownloadUrl -Destination $DscPushModulePath
 
 #$wc = New-Object System.Net.WebClient
 #$wc.DownloadFile($GithubDownloadUrl, $DscPushModulePath)
 #$null = Invoke-WebRequest -Uri $GithubDownloadUrl -OutFile $DscPushModulePath
-Expand-Archive $DscPushModulePath -DestinationPath $WorkshopPath -Force
-Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force -ErrorAction Stop
+#Expand-Archive $DscPushModulePath -DestinationPath $WorkshopPath -Force
+#Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force -ErrorAction Stop
 
 #Copy DscPush module to Modules folder
 Write-Verbose "Copying module to workshop Modules folder"
@@ -60,6 +59,9 @@ Write-Verbose "Deleting extracted repo directory"
 Remove-Item -Path "$workshopPath\dscpush-$BranchName" -Recurse -Force
 
 #Install and configure required DSC Resources
+Write-Verbose "Ensuring NuGet installed"
+Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+
 Write-Verbose "Downloading and installing required DSC Resources"
 $null = New-Item -Path "$WorkshopPath\Resources" -ItemType Directory -Force -ErrorAction Stop
 $RequiredDscResources.ForEach({
@@ -73,5 +75,5 @@ $RequiredDscResources.ForEach({
         }
 
     Write-Verbose "Saving Module ($_) to $WorkshopPath\Resources"
-    Save-Module -Name $_ -Path "$WorkshopPath\Resources" -Force
+    Save-Module -Name $_ -Path "$WorkshopPath\Resources" -Force -Confirm:$false
 })
