@@ -1207,19 +1207,22 @@ function Initialize-DeploymentEnvironment
         Start-Service "WinRM" -Confirm:$false -ErrorAction Stop
     }
 
-    # Add the IP list of the target VMs to the trusted host list
+    Write-Verbose "Add the IP list of the target VMs ($TargetIPList) to the trusted host list"
     $currentTrustedHost = (Get-Item "WSMan:\localhost\Client\TrustedHosts").Value
     if(($currentTrustedHost -ne '*') -and ([string]::IsNullOrEmpty($currentTrustedHost) -eq $false))
     {
         $scriptTrustedHost = @($currentTrustedHost,$($TargetIPList -join ", ")) -join ", "
+        Write-Verbose "Setting Trusted Hosts List to: $scriptTrustedHost"
         Set-Item -Path "WSMan:\localhost\Client\TrustedHosts" -Value $scriptTrustedHost -Force
     }
     elseif($currentTrustedHost -ne '*')
     {
         $scriptTrustedHost = $TargetIPList -join ", "
+        Write-Verbose "Setting Trusted Hosts List to: $scriptTrustedHost"
         Set-Item -Path "WSMan:\localhost\Client\TrustedHosts" -Value $scriptTrustedHost -Force
     }
 
+    Write-Verbose "Return current Trusted Hosts list so we can reset to that after publishing."
     return $currentTrustedHost
 }
 
