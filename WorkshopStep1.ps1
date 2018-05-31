@@ -36,13 +36,13 @@ $null = New-Item -Path $WorkshopPath -ItemType Directory -Force -ErrorAction Sto
 #Download DscPush from GitHub and copy to $WorkshopPath
 #Write-Verbose "Downloading repo from GitHub and extracting to C:\DscPushWorkshop"
 #Requires -module BitsTransfer
-#Start-BitsTransfer -Source $GithubDownloadUrl -Destination $DscPushModulePath
+Start-BitsTransfer -Source $GithubDownloadUrl -Destination $DscPushModulePath
 
 #$wc = New-Object System.Net.WebClient
 #$wc.DownloadFile($GithubDownloadUrl, $DscPushModulePath)
 #$null = Invoke-WebRequest -Uri $GithubDownloadUrl -OutFile $DscPushModulePath
-#Expand-Archive $DscPushModulePath -DestinationPath $WorkshopPath -Force
-#Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force -ErrorAction Stop
+Expand-Archive $DscPushModulePath -DestinationPath $WorkshopPath -Force
+Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force -ErrorAction Stop
 
 #Copy DscPush module to Modules folder
 Write-Verbose "Copying module to workshop Modules folder"
