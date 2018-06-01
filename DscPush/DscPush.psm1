@@ -881,7 +881,7 @@ function Add-PartialProperties
 
     #Import the partial secrets, stored secrets, secrets key, and convert the hashed passwords into secureString objs
     $secretsList = ConvertFrom-Json ([string](Get-Content $PartialSecretsPath))
-    $storedSecrets = ConvertFrom-Json ([string](Get-Content $StoredSecretsPath))
+    [array]$storedSecrets = ConvertFrom-Json ([string](Get-Content $StoredSecretsPath))
     [byte[]] $secretsKey = Get-Content $SecretsKeyPath
     $securedSecrets = @(
         $storedSecrets.ForEach({
