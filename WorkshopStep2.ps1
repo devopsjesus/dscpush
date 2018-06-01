@@ -71,12 +71,74 @@ $partialSecretsPath               = "$WorkshopPath\DSCPushSetup\Settings\Partial
 $storedSecretsPath                = "$WorkshopPath\DSCPushSetup\Settings\StoredSecrets.json"
 $secretsKeyPath                   = "$WorkshopPath\DSCPushSetup\Settings\SecretsKey.json"
 $mofOutputPath                    = "$WorkshopPath\DSCPushSetup\Settings\mofStore"
-
 Initialize-DscPush -GeneratePartialCatalog -PartialCatalogPath $partialCatalogPath -PartialStorePath $partialStorePath
-$partialCatalog = Import-PartialCatalog "$SettingsPath\PartialCatalog.json"
 
+$partialCatalog = Import-PartialCatalog "$SettingsPath\PartialCatalog.json"
 Remove-Item -Path $NodeDefinitionFilePath -ErrorAction SilentlyContinue
-Initialize-DscPush -GenerateNewNodeDefinitionFile -SettingsPath $SettingsPath -NodeTemplatePath "$SettingsPath\NodeTemplate.ps1" -NodeDefinitionFilePath $NodeDefinitionFilePath -GenerateSecrets -PartialCatalogPath "$SettingsPath\PartialCatalog.json" -PartialStorePath "$WorkshopPath\Partials"
+
+$initDscPushGenerateParams = @{
+    GenerateNewNodeDefinitionFile = $true
+    SettingsPath                  = $SettingsPath
+    NodeTemplatePath              = "$SettingsPath\NodeTemplate.ps1"
+    NodeDefinitionFilePath        = $NodeDefinitionFilePath
+    PartialCatalogPath            = "$SettingsPath\PartialCatalog.json"
+    PartialStorePath              = "$WorkshopPath\Partials"
+}
+Initialize-DscPush @initDscPushGenerateParams
+
+#region Generate Secrets inline to fully automate the experience
+function ConvertTo-ByteArray {
+
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.BitArray]
+        $BitArray
+    )
+
+    $numBytes = [System.Math]::Ceiling($BitArray.Count / 8)
+
+    $bytes = New-Object byte[] $numBytes
+    $byteIndex = 0 
+    $bitIndex = 0
+
+    for ($i = 0; $i -lt $BitArray.Count; $i++) {
+        if ($BitArray[$i]){
+            $bytes[$byteIndex] = $bytes[$byteIndex] -bor (1 -shl (7 - $bitIndex))
+        }
+        $bitIndex++
+        if ($bitIndex -eq 8) {
+            $bitIndex = 0
+            $byteIndex++
+        }
+    }
+
+    ,$bytes
+}
+
+#Find parameter types of pscredential and export their metadata to a file
+$partialSecrets = $partialCatalog.ForEach({
+    [ordered]@{Partial=$_.Name;Secrets=$_.Parameters.Where({$_.StaticType -eq "System.Management.Automation.PSCredential"}).Name}
+})
+$null = ConvertTo-Json $partialSecrets | Out-File "$SettingsPath\PartialSecrets.json"
+
+#region Generate password key
+$BitArray = New-Object System.Collections.BitArray(256)
+for ($i = 0; $i -lt 256 ;$i++)
+{
+    $BitArray[$i] = [bool](Get-Random -Maximum 2)
+}
+[Byte[]] $key = ConvertTo-ByteArray -BitArray $BitArray
+$key | Out-File "$SettingsPath\SecretsKey.json"
+#endregion
+
+$domainAdminCredSecret = @{
+    Secret   = "DomainCredential"
+    Username = $DeploymentCredential.UserName
+    Password = (ConvertFrom-SecureString $DeploymentCredential.Password -Key $key)
+}
+#Export the mess
+$null = ConvertTo-Json $domainAdminCredSecret | Out-File "$SettingsPath\StoredSecrets.json"
+#endregion
 
 #region Update Node Definition
 $nodeDefinition = . $NodeDefinitionFilePath
