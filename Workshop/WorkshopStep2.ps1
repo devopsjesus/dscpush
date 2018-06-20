@@ -8,7 +8,6 @@ param
 
     [parameter()]
     [ValidatePattern("[a-f0-9]{40}")]
-    [AllowNull]
     [string]
     $RemoteAuthCertThumbprint,
 

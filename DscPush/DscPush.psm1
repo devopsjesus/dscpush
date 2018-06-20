@@ -102,8 +102,6 @@ function Publish-TargetConfig
         $DeploymentCredential,
 
         [parameter()]
-        [ValidatePattern("[a-f0-9]{40}")]
-        [AllowNull]
         [string]
         $RemoteAuthCertThumbprint,
 
@@ -1255,8 +1253,6 @@ function Connect-TargetAdapter
         $Credential,
 
         [parameter()]
-        [ValidatePattern("[a-f0-9]{40}")]
-        [AllowNull]
         [string]
         $CertificateThumbprint,
 
@@ -1481,7 +1477,7 @@ function Select-DscResource
     $targetPartials = $PartialCatalog.where({$_.Name -in $TargetConfig.RoleList})
 
     #Point to C:\Program Files\WindowsPowerShell\Modules
-    $modulePath = $($env:PSModulePath.split(";")[1])
+    $modulePath = "$env:ProgramFiles\WindowsPowerShell\Modules"
 
     #Retrive unique list of required DSC Resources
     $targetResources = ($targetPartials.Resources.Where({!([string]::IsNullOrEmpty($_))}).Split(",")) | Select-Object -Unique

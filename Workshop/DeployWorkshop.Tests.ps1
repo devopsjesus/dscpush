@@ -27,7 +27,7 @@ Describe "DscPush Workshop Deployment" {
         #endregion
 
         It "Start-DscConfiguration should run successfully on the VMs" {
-            { Start-DscConfiguration -CimSession $cimSessions -Wait -UseExisting } | Should Not Throw
+            { $cimSessions.ForEach({ Start-DscConfiguration -CimSession $_ -Wait -UseExisting })} | Should Not Throw
         }
         
         It "Test-DscConfiguration should return True for both VMs" {

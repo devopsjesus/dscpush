@@ -39,7 +39,6 @@ Write-Verbose "Downloading repo from GitHub and extracting to C:\DscPushWorkshop
 Start-BitsTransfer -Source $GithubDownloadUrl -Destination $DscPushModulePath
 Expand-Archive $DscPushModulePath -DestinationPath $WorkshopPath -Force
 Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\DSCPushSetup" -Destination $WorkshopPath -Recurse -Force -ErrorAction Stop
-Copy-Item -Path "$WorkshopPath\dscpush-$BranchName\Workshop\WorkshopStep*" -Destination $WorkshopPath -Force -ErrorAction Stop
 
 #Copy DscPush module to Modules folder
 Write-Verbose "Copying module to workshop Modules folder"
