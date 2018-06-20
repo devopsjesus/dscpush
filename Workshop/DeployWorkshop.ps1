@@ -22,10 +22,10 @@ if ($ClobberVMs)
 Start-BitsTransfer -Source https://github.com/devopsjesus/dscpush/archive/master.zip -Destination C:\windows\Temp\dscpushworkshop.zip
 Expand-Archive C:\windows\Temp\dscpushworkshop.zip -DestinationPath C:\windows\Temp\dscpushworkshop -Force
 $null = New-Item C:\DSCPushWorkshop -ItemType Directory -Force
-Copy-Item C:\Windows\Temp\dscpushworkshop\dscpush-master\* -Destination C:\DSCPushWorkshop -Force
+Copy-Item C:\Windows\Temp\dscpushworkshop\dscpush-master\* -Destination C:\DSCPushWorkshop -Force -Recurse
 
-. C:\DSCPushWorkshop\WorkshopStep0-hyperv.ps1 -clobber -Credential $Credential
+. C:\DSCPushWorkshop\Workshop\WorkshopStep0-hyperv.ps1 -clobber -Credential $Credential
 
-. C:\DSCPushWorkshop\WorkshopStep1.ps1
+. C:\DSCPushWorkshop\Workshop\WorkshopStep1.ps1
 
-. C:\DSCPushWorkshop\WorkshopStep2 -DeploymentCredential $Credential
+. C:\DSCPushWorkshop\Workshop\WorkshopStep2 -DeploymentCredential $Credential
