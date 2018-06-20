@@ -103,6 +103,7 @@ function Publish-TargetConfig
 
         [parameter()]
         [ValidatePattern("[a-f0-9]{40}")]
+        [AllowNull]
         [string]
         $RemoteAuthCertThumbprint,
 
@@ -1255,6 +1256,7 @@ function Connect-TargetAdapter
 
         [parameter()]
         [ValidatePattern("[a-f0-9]{40}")]
+        [AllowNull]
         [string]
         $CertificateThumbprint,
 

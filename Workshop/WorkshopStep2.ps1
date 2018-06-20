@@ -8,6 +8,7 @@ param
 
     [parameter()]
     [ValidatePattern("[a-f0-9]{40}")]
+    [AllowNull]
     [string]
     $RemoteAuthCertThumbprint,
 
@@ -212,7 +213,7 @@ $publishTargetSettings = @{
     CopyContentStore                 = $true
     ForceResourceCopy                = $true
     DeploymentCredential             = $DeploymentCredential
-    #RemoteAuthCertThumbprint         = $RemoteAuthCertThumbprint
+    RemoteAuthCertThumbprint         = $RemoteAuthCertThumbprint
     ContentStoreRootPath             = $WorkshopPath
     ContentStoreDestPath             = $ContentStoreDestPath
     ContentStoreModulePath           = $contentStoreModulePath
