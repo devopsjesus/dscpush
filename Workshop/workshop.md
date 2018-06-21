@@ -1,4 +1,4 @@
-# IT/Dev Connections DscPush Workshop
+# DscPush Workshop
 
 1. Create 2 Windows Server 2016 VMs
    - Full Interface or Core version
