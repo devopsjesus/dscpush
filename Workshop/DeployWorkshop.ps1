@@ -1,12 +1,14 @@
 ﻿#requires -RunAsAdministrator
 
 param(
-    $Credential = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
+    $Credential,
 
     $VmList = @(
         @{TargetItemName = "DscPushDC"; TargetIP = "192.0.0.236"; MacAddress = "00-15-5d-36-F2-10"; VmMemory = 1024MB }
         @{TargetItemName = "DscPushCH"; TargetIP = "192.0.0.237"; MacAddress = "00-15-5d-36-F2-11"; VmMemory = 1024MB }
     ),
+
+    $VhdPath = "C:\Users\Public\Documents\Hyper-V\Virtual hard disks\win2016core.vhdx",
 
     [switch]
     $ClobberVMs
@@ -19,8 +21,10 @@ if ($ClobberVMs)
 {
     Stop-VM $vmList.TargetItemName -Force -ErrorAction Ignore
     Remove-VM $vmList.TargetItemName -Force -ErrorAction Ignore
+    
+    $vhdParentPath = Split-Path -Path $VhdPath -Parent
     $vmList.TargetItemName.ForEach({
-        Remove-Item "C:\users\Public\Documents\Hyper-V\Virtual hard disks\$_.vhdx" -ErrorAction Ignore
+        Remove-Item "$vhdParentPath\$_.vhdx" -ErrorAction Ignore
     })
 }
 
@@ -33,7 +37,7 @@ $null = New-Item "C:\DSCPushWorkshop" -ItemType Directory -Force
 Copy-Item "$env:TEMP\dscpushworkshop\dscpush-master\*" -Destination "C:\DSCPushWorkshop" -Force -Recurse
 
 Write-Verbose "Generating Hyper-V Machines"
-. C:\DSCPushWorkshop\Workshop\WorkshopStep0-hyperv.ps1 -Credential $Credential -VmList $VmList
+. C:\DSCPushWorkshop\Workshop\WorkshopStep0-hyperv.ps1 -Credential $Credential -VmList $VmList -VhdPath $VhdPath
 
 Write-Verbose "Making appropriate changes to the system"
 . C:\DSCPushWorkshop\Workshop\WorkshopStep1.ps1
