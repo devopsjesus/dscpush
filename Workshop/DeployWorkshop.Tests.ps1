@@ -13,7 +13,7 @@
         The IP addresses of the VMs you built.  Hopefully with code...
 #>
 param(
-    $Credential = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
+    $Credential,
 
     $vmNetworkAddressList = @("192.0.0.236","192.0.0.237")
 )
@@ -26,17 +26,23 @@ Describe "DscPush Workshop Deployment" {
         Stop-DscConfiguration -CimSession $cimSessions -WarningAction Ignore
         #endregion
 
-        It "Start-DscConfiguration should run successfully on the VMs" {
-            { $cimSessions.ForEach({ Start-DscConfiguration -CimSession $_ -Wait -UseExisting })} | Should Not Throw
+        #populate the testCases var for Pester to run and report on each target
+        $testCases = $cimSessions.ForEach({@{cimSession = $_}})
+
+        It "Start-DscConfiguration should run successfully on <cimSession>" -TestCases $testCases {
+            param ( $cimSession )
+            { Start-DscConfiguration -CimSession $cimSession -Wait -UseExisting } | Should Not Throw
         }
         
-        It "Test-DscConfiguration should return True for both VMs" {
-            $testDscReturn = Test-DscConfiguration -CimSession $cimSessions
+        It "Test-DscConfiguration should return True for <cimSession>"  -TestCases $testCases {
+            param ( $cimSession )
+            $testDscReturn = Test-DscConfiguration -CimSession $cimSession
             $testDscReturn | Should Be @($True,$True)
         }
 
-        It "Get-DscConfiguration should run successfully on the VMs" {
-            { Get-DscConfiguration -CimSession $cimSessions } | Should Not Throw
+        It "Get-DscConfiguration should run successfully on <cimSession>"  -TestCases $testCases {
+            param ( $cimSession )
+            { Get-DscConfiguration -CimSession $cimSession } | Should Not Throw
         }
     }
 }
