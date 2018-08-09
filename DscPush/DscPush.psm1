@@ -1,4 +1,57 @@
-﻿function Initialize-DscPush
+﻿<#
+    .SYNOPSIS
+        Initializes the required configuration files necessary to configure DscPush.
+
+    .DESCRIPTION
+        Performs several configuration operations necessary to operate DscPush, including, generating
+        the Partial Catalog, generating secrets, & creating new or updating existing Node Definition Files.
+
+    .PARAMETER GeneratePartialCatalog
+        Instructs the function to generate the partial catalog.
+
+    .PARAMETER GenerateSecrets
+        Instructs the function to generate the files required to support secrets (stored credentials, certificate
+        key passwords, and so on.
+
+    .PARAMETER GenerateNewNodeDefinitionFile
+        Instructs the function to generate a new Node Definition File.
+
+    .PARAMETER UpdateNodeDefinitionFile
+        Instructs the function to update an existing Node Definition File.
+
+    .PARAMETER ContentStoreRootPath
+        Root path of the directory that will be copied to any content hosts.
+
+    .PARAMETER SettingsPath
+        Path to the directory containing the settings files that configure DscPush.
+
+    .PARAMETER PartialCatalogPath
+        Path to generate and reference the Partial Catalog.
+        
+    .PARAMETER PartialStorePath
+        Path to the directory containing the Partial Configurations to be published.
+
+    .PARAMETER NodeTemplatePath
+        Path to the Node Template file that initializes the Node Definition File.
+        
+    .PARAMETER NodeDefinitionFilePath
+        Path to the Node Definition File to be generated or updated. File will not be overwritten.
+
+    .PARAMETER UpdateNodeDefinitionFilePath
+        Path to the generate an updated Node Definition File.
+
+    .Example
+        $initDscPushGenerateParams = @{
+            GenerateNewNodeDefinitionFile = $true
+            SettingsPath                  = $SettingsPath
+            NodeTemplatePath              = "$SettingsPath\NodeTemplate.ps1"
+            NodeDefinitionFilePath        = $NodeDefinitionFilePath
+            PartialCatalogPath            = "$SettingsPath\PartialCatalog.json"
+            PartialStorePath              = "$WorkshopPath\Partials"
+        }
+        Initialize-DscPush @initDscPushGenerateParams
+#>
+function Initialize-DscPush
 {
     param
     (
@@ -93,6 +146,117 @@
     }
 }
 
+<#
+    .SYNOPSIS
+        Function to publish DSC configurations.
+
+    .DESCRIPTION
+        Performs several operations necessary to publish DSC Configurations to the targets defined in the
+        Node Definition File, including compiling the configurations, sanitizing the PS module path, & copying required
+        file resources to the targets.
+        
+    .PARAMETER DeploymentCredential
+        Credential of the administrator account on the targets. Typically the local admin account of the deployed image.
+
+    .PARAMETER RemoteAuthCertThumbprint
+        Certificate thumbprint to authenticate on the targets.
+
+    .PARAMETER ContentStoreRootPath
+        Root path of the directory that will be copied to any content hosts.
+
+    .PARAMETER ContentStoreModulePath
+        Path to the directory containing modules supporting the partial configurations.
+
+    .PARAMETER ContentStoreDscResourceStorePath
+        Path to the directory containing the DSC Resource modules required by the partial configurations.
+        
+    .PARAMETER NodeDefinitionFilePath
+        Path to the Node Definition File to be generated or updated. File will not be overwritten.
+
+    .PARAMETER PartialCatalogPath
+        Path to a generated Partial Catalog.
+        
+    .PARAMETER PartialDependenciesFilePath
+        Instructs the function to generate the partial catalog.
+
+    .PARAMETER PartialSecretsPath
+        Path to the file that contains the names and referencing partials with pscredential type parameter names.
+
+    .PARAMETER StoredSecretsPath
+        Path to the file that contains the secrets required by the partial configurations.
+
+    .PARAMETER SecretsKeyPath
+        Path to the file containing the key to unencrypt the stored secrets.
+
+    .PARAMETER mofOutputPath
+        Path to the directory containing the compiled mofs.
+        
+    .PARAMETER TargetLcmSettings
+        Hashtable containing the properties to push to the target and applied to the LCM.
+
+    .PARAMETER TargetCertDirName
+        Path to the directory on the target that will contain the required certificates for mof encryption.
+        
+    .PARAMETER MofEncryptionCertThumbprint
+        Thumbprint of the certificate used to encrypt the compiled mofs.
+        
+    .PARAMETER MofEncryptionCertPath
+        Local path to the certificate used to encrypt the compiled mofs.
+
+    .PARAMETER MofEncryptionPKPath
+        Local path to the private key of the certificate used to encrypt the compiled mofs.
+
+    .PARAMETER MofEncryptionPKPassword
+        Password used to secure the private key for mof encryption.
+
+    .PARAMETER EnableTargetMofEncryption
+        Switch to instruct the function to perform the required operations to encypt compiled mofs.
+
+    .PARAMETER CompilePartials
+        Switch to instruct the function to compile the target partials.
+        
+    .PARAMETER SanitizeModulePaths
+        Switch to instruct the function to remove any modules referenced in the ContentStoreModulePath from the PS Module Path.
+
+    .PARAMETER CopyContentStore
+        Switch to instruct the function to copy the ContentStore directory contents to any content hosts.
+        
+    .PARAMETER ContentStoreDestPath
+        The Desination path for the content store on the content hosts.
+        
+    .PARAMETER ForceResourceCopy
+        Switch to instruct the function to copy the required DSC Resource modules to the targets.
+        
+    .Example
+        $publishTargetSettings = @{
+            CompilePartials                  = $true
+            SanitizeModulePaths              = $true
+            CopyContentStore                 = $true
+            ForceResourceCopy                = $true
+            DeploymentCredential             = $DeploymentCredential
+            ContentStoreRootPath             = "C:\workspace"
+            ContentStoreDestPath             = "C:\ContentStore"
+            ContentStoreModulePath           = "$workspace\Modules"
+            ContentStoreDscResourceStorePath = "$workspace\DscResources"
+            NodeDefinitionFilePath           = "$workspace\DscPushSetup\DefinitionStore\NodeDefinition.ps1"
+            PartialCatalogPath               = "$workspace\DSCPushSetup\Settings\PartialCatalog.json"
+            PartialDependenciesFilePath      = "$WorkshopPath\DSCPushSetup\Settings\PartialDependencies.json"
+            PartialSecretsPath               = "$WorkshopPath\DSCPushSetup\Settings\PartialSecrets.json"
+            StoredSecretsPath                = "$WorkshopPath\DSCPushSetup\Settings\StoredSecrets.json"
+            SecretsKeyPath                   = "$WorkshopPath\DSCPushSetup\Settings\SecretsKey.json"
+            mofOutputPath                    = "$WorkshopPath\DSCPushSetup\Settings\mofStore"
+            TargetLcmSettings                = @{
+                ConfigurationModeFrequencyMins   = 15
+                RebootNodeIfNeeded               = $True
+                ConfigurationMode                = "ApplyAndAutoCorrect"
+                ActionAfterReboot                = "ContinueConfiguration"
+                RefreshMode                      = "Push"
+                AllowModuleOverwrite             = $true
+                DebugMode                        = "None"
+            }
+        }
+        Publish-TargetConfig @publishTargetSettings -Verbose
+#>
 function Publish-TargetConfig
 {
     param

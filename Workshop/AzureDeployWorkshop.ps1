@@ -16,7 +16,7 @@ param
 
     [parameter()]
     [string]
-    $Location = "westus",
+    $Location = "westus2",
 
     [parameter()]
     [string]
@@ -26,11 +26,6 @@ param
     [ValidatePattern({"*.json"})]
     [string]
     $TemplateFilePath = "C:\Windows\Temp\AzureDeploy.json",
-
-    [parameter()]
-    [ValidatePattern({"*.json"})]
-    [string]
-    $TemplateParamFilePath = "C:\Windows\Temp\AzureDeploy.params.json",
 
     [parameter(Mandatory)]
     [pscredential]
@@ -42,11 +37,14 @@ param
 
     [parameter()]
     [switch]
-    $ClobberResourceGroup
+    $ClobberResourceGroup = $true
 )
 
 Write-Verbose "Logging into Azure"
-$null = Login-AzureRmAccount -SubscriptionId $SubscriptionId -ErrorAction Stop
+if (! $login)
+{
+    $login = Login-AzureRmAccount -SubscriptionId $SubscriptionId -ErrorAction Stop
+}
 $certSecret = $VmAdminCred.Password
 
 Write-Verbose "Checking for existing Resource Group"
@@ -91,14 +89,21 @@ $cert = Import-AzureKeyVaultCertificate -VaultName $ResourceGroupName -Name $Res
 $keyVaultSecret = Get-AzureKeyVaultSecret -VaultName $ResourceGroupName -Name $ResourceGroupName
 #endregion Security
 
+#region inject parameters and create object to pass to AzureRM
+$paramObjectHashtable = @{
+    adminUsername     = $VmAdminCred.Username
+    adminPassword     = $VmAdminCred.GetNetworkCredential().Password
+    keyVaultSecretUrl = $keyVaultSecret.Id
+    vmSize            = $VmSize
+}
+#endregion
+
 Write-Verbose "Deployment of template commencing"
 $deploymentParams = @{
-    Name                  = $ResourceGroupName
-    ResourceGroupName     = $ResourceGroupName
-    TemplateFile          = $TemplateFilePath
-    TemplateParameterFile = $TemplateParamFilePath
-    AdminPassword         = $certSecret
-    KeyVaultSecretUrl     = $keyVaultSecret.Id
+    Name                    = $ResourceGroupName
+    ResourceGroupName       = $ResourceGroupName
+    TemplateFile            = $TemplateFilePath
+    TemplateParameterObject = $paramObjectHashtable
 }
 $deployment = New-AzureRmResourceGroupDeployment @deploymentParams -Force -Verbose
 
