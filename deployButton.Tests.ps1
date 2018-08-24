@@ -13,9 +13,9 @@
         The IP addresses of the VMs you built.  Hopefully with code...
 #>
 param(
-    $Credential,
+    $Credential = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
 
-    $vmNetworkAddressList = @("192.0.0.236","192.0.0.237")
+    $vmNetworkAddressList = @("192.168.1.24")
 )
 
 Describe "DscPush Workshop Deployment" {
@@ -31,7 +31,7 @@ Describe "DscPush Workshop Deployment" {
 
         It "Start-DscConfiguration should run successfully on <cimSession>" -TestCases $testCases {
             param ( $cimSession )
-            { Start-DscConfiguration -CimSession $cimSession -Wait -UseExisting } | Should Not Throw
+            { Start-DscConfiguration -CimSession $cimSession -Wait -UseExisting -ErrorAction Stop } | Should Not Throw
         }
         
         It "Test-DscConfiguration should return True for <cimSession>"  -TestCases $testCases {

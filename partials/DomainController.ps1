@@ -2,15 +2,8 @@
     .SYNOPSIS
         Domain Controller
 #>
-Param(
-    [parameter(Mandatory)]
-    [string]
-    $TargetName,
-
-    [parameter(Mandatory)]
-    [string]
-    $OutputPath,
-
+Param
+(
     [parameter(Mandatory)]
     [ValidateScript({[System.Uri]::CheckHostName($_) -eq 'Dns'})]
     [ValidateLength(1,15)]
@@ -34,7 +27,7 @@ Configuration DomainController
     Import-DscResource -ModuleName 'xActiveDirectory'
     Import-DscResource -ModuleName 'xDnsServer'
  
-    Node $targetName 
+    Node $TargetIP
     {
         WindowsFeature ADDSInstall 
         { 
@@ -47,6 +40,7 @@ Configuration DomainController
             DomainName = $DomainName 
             DomainAdministratorCredential = $DomainCredential
             SafemodeAdministratorPassword = $DomainCredential
+            DomainNetbiosName = $DomainName.Split(".")[0]
             DependsOn = "[WindowsFeature]ADDSInstall"
         }
 
@@ -73,15 +67,3 @@ Configuration DomainController
         }
     }
 }
-
-$ConfigData = @{ 
-    AllNodes = @(  
-        @{ 
-            NodeName = $TargetName
-            PSDscAllowPlainTextPassword = $true
-            PSDscAllowDomainUser = $true
-        }
-    ) 
-} 
-
-$null = DomainController -ConfigurationData $ConfigData -OutputPath $outputPath

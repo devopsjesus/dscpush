@@ -1,13 +1,13 @@
 ﻿#Requires -Version 5 –Modules Hyper-V -RunAsAdministrator
 
 param(
-    $VhdPath = "C:\Users\Public\Documents\Hyper-V\Virtual hard disks\win2016core.vhdx",
+    $VhdPath = "C:\Virtualharddisks\win2016core.vhdx",
 
-    $VSwitchName = "DscPush-vSwitch1",
-
-    $HostIpAddress = "192.0.0.235",
+    $VSwitchName = "Internet-NIC1",
     
-    $DnsServer = "192.0.0.236",
+    $HostIpAddress = "192.168.1.23",
+    
+    $DnsServer = "192.168.1.254",
 
 	[parameter(mandatory)]
     [pscredential]
@@ -17,20 +17,42 @@ param(
 
     $TargetSubnet = "255.255.255.0",
 
-    [switch]$Clobber,
+    [switch]$Clobber = $true,
+
+    [switch]$DifferencingDisks,
     
-    $VmList = @(
-        @{TargetItemName = 'DscPushDC'; TargetIP = $dnsServer; MacAddress = '00-15-5d-36-F2-10'; VmMemory = 1024MB }
-        @{TargetItemName = 'DscPushCH'; TargetIP = '192.0.0.237'; MacAddress = '00-15-5d-36-F2-11'; VmMemory = 1024MB }
-    )
+    $NodeDefinitionFilePath = "C:\Library\deploy\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
 )
 
+if (!(Get-CimInstance -Namespace root\virtualization\v2 -Class Msvm_VirtualSystemManagementService -ErrorAction Ignore))
+{
+    throw "Incorrect version of Hyper-V. Please update to continue"
+}
+
+#Region Ensure paths are valid
 if (! (Test-Path $VhdPath))
 {
     throw "Could not find Parent VHDX."
 }
 
-Import-Module Hyper-V
+if (! (Test-Path $NodeDefinitionFilePath))
+{
+    throw "Could not find Node Definition File."
+}
+#endregion
+
+#region Build the VM configs list
+$nodeDefinition = . $NodeDefinitionFilePath
+
+$vmList = $nodeDefinition.Configs.ForEach({
+    @{
+        TargetItemName = $_.Variables.ComputerName
+        TargetIP       = $_.TargetAdapter.NetworkAddress.IPAddressToString
+        MacAddress     = $_.TargetAdapter.PhysicalAddress
+        VmMemory       = 1024MB
+    }
+})
+#endregion
 
 function Set-VmGuestIpAddress
 {
@@ -83,18 +105,13 @@ function Set-VmGuestIpAddress
     $null = $hypervManagement.SetGuestNetworkAdapterConfiguration($guestVM, $targetNicConfig.GetText(1))
 }
 
-if (!(Get-CimInstance -Namespace root\virtualization\v2 -Class Msvm_VirtualSystemManagementService -ErrorAction Ignore))
-{
-    throw "Incorrect version of Hyper-V. Please update to continue"
-}
-
 #region TrustedHosts
 #Add the IP list of the target VMs to the trusted host list
 $currentTrustedHost = (Get-Item WSMan:\localhost\Client\TrustedHosts).Value
 
 if(($currentTrustedHost -ne '*') -and ([string]::IsNullOrEmpty($currentTrustedHost) -eq $false))
 {
-    $scriptTrustedHost = $currentTrustedHost + ", " + $($VmList.TargetIP -join ", ")
+    $scriptTrustedHost = $currentTrustedHost + ", " + $($vmList.TargetIP -join ", ")
 
     Set-Item -Path WSMan:\localhost\Client\TrustedHosts -Value $scriptTrustedHost -Force
 }
@@ -120,7 +137,6 @@ if ($localIPList.IPAddress -notcontains $HostIpAddress)
 {
     $null = New-NetIPAddress –IPAddress $HostIpAddress –PrefixLength 24 -InterfaceIndex $targetNIC.ifIndex -ErrorAction Ignore
     $null = Set-NetIPAddress –IPAddress $HostIpAddress –PrefixLength 24 -InterfaceIndex $targetNIC.ifIndex -ErrorAction Ignore 
-
 }
 
 #Set host network adapter/switch to enabled
@@ -131,7 +147,6 @@ if ($targetNIC.Status -eq 'Disabled')
 #endregion
 
 #region provisioning VMs
-#Run through each role to prepare the VMs for stack buildout
 workflow ConfigureVM
 {
 	param(
@@ -147,33 +162,42 @@ workflow ConfigureVM
 
         $RemoteCred,
 
-        [bool]$Clobber
+        [bool]$Clobber,
+
+        [bool]$DifferencingDisks
 	)
 
-    $VhdParentPath = Split-Path -Path $VHDPath
+    $vhdParentPath = Split-Path -Path $VHDPath -Parent
 
 	foreach -parallel ($vm in $VmList)
 	{
         sequence
         {
-		    $vmName = $vm.TargetItemName
-            $vmIp = $vm.TargetIP
-            $vmMac = $vm.MacAddress
+		    $vmName   = $vm.TargetItemName
+            $vmIp     = $vm.TargetIP
+            $vmMac    = $vm.MacAddress
             $vmMemory = $vm.vmMemory
 
 	        #First cleanup the environment by removing the existing VMs and VHDXs, if clobber is set to true
             Write-Output "Deploying infrastructure for target item $vmName"
 
-            if (Test-Path "$VhdParentPath\$vmName.vhdx")
+            if (Test-Path "$vhdParentPath\$vmName.vhdx")
 		    {
                 if ($Clobber)
                 {
                     Stop-VM $vmName -TurnOff -Force -ErrorAction Ignore
-	    		    Remove-VM $vmName -force -ErrorAction Ignore
-			        Remove-Item "$VhdParentPath\$vmName.vhdx" -ErrorAction Ignore
+	    		    Remove-VM $vmName -Force -ErrorAction Ignore
+			        Remove-Item "$vhdParentPath\$vmName.vhdx" -ErrorAction Ignore
 
                     #create new differencing disks based on the template disk
-		            $newVHD = New-VHD -ParentPath "$VHDPath" -Differencing -Path "$VhdParentPath\$vmName.vhdx"
+		            if ($DifferencingDisks)
+                    {
+                        $newVHD = New-VHD -Path "$vhdParentPath\$vmName.vhdx" -ParentPath "$VHDPath" -Differencing
+                    }
+                    else #do a full copy
+                    {
+                        Copy-Item -Path "$VHDPath" -Destination "$vhdParentPath\$vmName.vhdx" -Force
+                    }
                 }
                 else
                 {
@@ -183,25 +207,33 @@ workflow ConfigureVM
             else
             {
                 #create new differencing disks based on the template disk
-		        $newVHD = New-VHD -ParentPath "$VHDPath" -Differencing -Path "$VhdParentPath\$vmName.vhdx"
+		        if ($DifferencingDisks)
+                {
+                    $newVHD = New-VHD -Path "$vhdParentPath\$vmName.vhdx" -ParentPath "$VHDPath" -Differencing
+                }
+                else #do a full copy
+                {
+                    Copy-Item -Path "$VHDPath" -Destination "$vhdParentPath\$vmName.vhdx" -Force
+                }
             }
         
             if (!(Get-VM $vmName -ErrorAction Ignore))
 		    {
                 #Create the new VMs based on the template VHDX
-		        $null = New-VM -Name $vmName -MemoryStartupBytes $VmMemory -VHDPath "$VhdParentPath\$vmName.vhdx" -Generation 2
+		        $null = New-VM -Name $vmName -MemoryStartupBytes $VmMemory -VHDPath "$vhdParentPath\$vmName.vhdx" -Generation 2
 
 		        #Create and configure the vNICs, assigning the static MAC addresses to the DscPush-vSwitch1 connected NICs
                 Connect-VMNetworkAdapter -VMName $vmName -Name "Network Adapter" -SwitchName $VSwitchName
 		        Set-VMNetworkAdapter -VMName $vmName -Name "Network Adapter" -StaticMacAddress $vmMac
             }
 
+            Write-Output "Starting VM $vmName"
 		    Start-VM -Name $vmName -WarningAction SilentlyContinue
 
 		    #Remove dashes from MAC address for Set-VmGuestIpAddress function requirements
 		    $vmMac = $vmMac.Replace('-','')
 
-            Write-Output "Configuring target item $VmName"
+            Write-Output "Configuring target item $vmName"
 		    while (!($remoteConnectTest))
 		    {
 			    sleep 1
@@ -222,13 +254,14 @@ workflow ConfigureVM
 try
 {
     $vmConfig = @{
-        VmList=$VmList
-        VHDPath=$VhdPath
-        VSwitchName=$VSwitchName
-        Subnet=$TargetSubnet
-        AdapterCount=$AdapterCount
-        RemoteCred=$Credential
-        Clobber=$Clobber
+        VmList            = $vmList
+        VHDPath           = $VhdPath
+        VSwitchName       = $VSwitchName
+        Subnet            = $TargetSubnet
+        AdapterCount      = $AdapterCount
+        RemoteCred        = $Credential
+        Clobber           = $Clobber
+        DifferencingDisks = $DifferencingDisks
     }
 
     ConfigureVM @vmConfig
