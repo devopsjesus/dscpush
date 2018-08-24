@@ -1,5 +1,8 @@
 ﻿param
 (
+    [string]
+    $WorkspacePath = $PSScriptRoot,
+
     [switch]
     $DeployInfrastructure = $true,
     
@@ -12,7 +15,6 @@
 
 #region vars
 #global vars
-$workspacePath     = "C:\dscpushtest"
 $targetLCMSettings = @{
     ConfigurationModeFrequencyMins   = 15
     RebootNodeIfNeeded               = $True
@@ -24,33 +26,33 @@ $targetLCMSettings = @{
 }
 
 #Node Definition file
-$nodeDefinitionFilePath = "$workspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
+$nodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
 
 #shared vars
-$dscPushModulePath = "$workspacePath\Modules\DSCPush"
-$partialCatalogPath = "$workspacePath\DSCPushSetup\Settings\PartialCatalog.json"
+$dscPushModulePath = "$WorkspacePath\Modules\DSCPush"
+$partialCatalogPath = "$WorkspacePath\DSCPushSetup\Settings\PartialCatalog.json"
 
 #default vars
 $partialCatalogPath          = $partialCatalogPath
-$partialStorePath            = "$workspacePath\partials"
-$contentStoreRootPath        = "$workspacePath\ContentStore"
+$partialStorePath            = "$WorkspacePath\partials"
+$contentStoreRootPath        = "$WorkspacePath\ContentStore"
 $ContentStoreDestPath        = "C:\ContentStore"
-$contentStoreModulePath      = "$workspacePath\modules"
-$DscResourcesPath            = "$workspacePath\resources"
-$partialSecretsPath          = "$workspacePath\DSCPushSetup\Settings\PartialSecrets.json"
-$StoredSecretsPath           = "$workspacePath\DSCPushSetup\Settings\StoredSecrets.json"
-$SecretsKeyPath              = "$workspacePath\DSCPushSetup\Settings\SecretsKey.json"
-$partialDependenciesFilePath = "$workspacePath\DSCPushSetup\Settings\PartialDependencies.json"
-$partialSecretsPath          = "$workspacePath\DSCPushSetup\Settings\PartialSecrets.json"
-$mofOutputPath               = "$workspacePath\DSCPushSetup\Settings\mofStore"
+$contentStoreModulePath      = "$WorkspacePath\modules"
+$DscResourcesPath            = "$WorkspacePath\resources"
+$partialSecretsPath          = "$WorkspacePath\DSCPushSetup\Settings\PartialSecrets.json"
+$StoredSecretsPath           = "$WorkspacePath\DSCPushSetup\Settings\StoredSecrets.json"
+$SecretsKeyPath              = "$WorkspacePath\DSCPushSetup\Settings\SecretsKey.json"
+$partialDependenciesFilePath = "$WorkspacePath\DSCPushSetup\Settings\PartialDependencies.json"
+$partialSecretsPath          = "$WorkspacePath\DSCPushSetup\Settings\PartialSecrets.json"
+$mofOutputPath               = "$WorkspacePath\DSCPushSetup\Settings\mofStore"
 
 #Mof encryption vars
 $mofEncryptionSettings = @{
     EnableTargetMofEncryption   = $false
     TargetCertDirName           = "Certificates"
     MofEncryptionCertThumbprint = "C3CD32F10653BB2C9F795520583A9A1EF0C7D7DC"
-    MofEncryptionCertPath       = "$workspacePath\Certificates\RpsDscEncryption.cer"
-    MofEncryptionPKPath         = "$workspacePath\Certificates\RpsDscEncryption.pfx"
+    MofEncryptionCertPath       = "$WorkspacePath\Certificates\RpsDscEncryption.cer"
+    MofEncryptionPKPath         = "$WorkspacePath\Certificates\RpsDscEncryption.pfx"
     MofEncryptionPKPassword     = $DeploymentCredential.Password
 }
 #endregion
@@ -85,7 +87,7 @@ Initialize-DscPush @initDeploymentSettings
 #the script starts and we don't have to wait for VMs to boot
 if ($DeployInfrastructure)
 {
-    $hyperVDeployScriptPath = "$workspacePath\deployVM-HyperV.ps1"
+    $hyperVDeployScriptPath = "$WorkspacePath\deployVM-HyperV.ps1"
     $deploymentParams = @{
         VhdPath                = $VhdPath
         VSwitchName            = "Internet-NIC1"
