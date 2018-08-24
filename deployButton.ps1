@@ -23,8 +23,6 @@ $targetLCMSettings = @{
     DebugMode                        = "None"
 }
 
-#Path and image credential to VHDx for infrastructure setup
-
 #Node Definition file
 $nodeDefinitionFilePath = "$workspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
 
