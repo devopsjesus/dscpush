@@ -37,7 +37,7 @@ Describe "DscPush Workshop Deployment" {
         It "Test-DscConfiguration should return True for <cimSession>"  -TestCases $testCases {
             param ( $cimSession )
             $testDscReturn = Test-DscConfiguration -CimSession $cimSession
-            $testDscReturn | Should Be @($True,$True)
+            $testDscReturn | Should Be 'True'
         }
 
         It "Get-DscConfiguration should run successfully on <cimSession>"  -TestCases $testCases {
