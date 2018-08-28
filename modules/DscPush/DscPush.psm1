@@ -19,11 +19,20 @@
     .PARAMETER UpdateNodeDefinitionFile
         Instructs the function to update an existing Node Definition File.
 
-    .PARAMETER ContentStoreRootPath
-        Root path of the directory that will be copied to any content hosts.
+    .PARAMETER SeedDscResources
+        Instructs the function to download the resources required by the partials into a specified folder.
 
-    .PARAMETER SettingsPath
-        Path to the directory containing the settings files that configure DscPush.
+    .PARAMETER DscResourceStorePath
+        Path where Required DSC Resources will be stored.
+
+    .PARAMETER PartialSecretsPath
+        Path to the file that contains the names and referencing partials with pscredential type parameter names.
+
+    .PARAMETER StoredSecretsPath
+        Path to the file that contains the secrets required by the partial configurations.
+
+    .PARAMETER SecretsKeyPath
+        Path to the file containing the key to unencrypt the stored secrets.
 
     .PARAMETER PartialCatalogPath
         Path to generate and reference the Partial Catalog.
@@ -42,12 +51,14 @@
 
     .Example
         $initDscPushGenerateParams = @{
-            GenerateNewNodeDefinitionFile = $true
-            SettingsPath                  = $SettingsPath
-            NodeTemplatePath              = "$SettingsPath\NodeTemplate.ps1"
-            NodeDefinitionFilePath        = $NodeDefinitionFilePath
-            PartialCatalogPath            = "$SettingsPath\PartialCatalog.json"
-            PartialStorePath              = "$WorkshopPath\Partials"
+            GeneratePartialCatalog = $true
+            GenerateSecrets        = $true
+            ContentStoreRootPath   = $workspacePath
+            PartialCatalogPath     = $partialCatalogPath
+            PartialStorePath       = $partialStorePath
+            PartialSecretsPath     = $partialSecretsPath
+            StoredSecretsPath      = $storedSecretsPath
+            SecretsKeyPath         = $secretsKeyPath
         }
         Initialize-DscPush @initDscPushGenerateParams
 #>
@@ -72,12 +83,24 @@ function Initialize-DscPush
         $UpdateNodeDefinitionFile,
 
         [Parameter()]
-        [string]
-        $ContentStoreRootPath,
-    
+        [switch]
+        $SeedDscResources,
+
         [Parameter()]
         [string]
-        $SettingsPath,
+        $DscResourcesPath,
+
+        [Parameter()]
+        [string]
+        $PartialSecretsPath,
+
+        [Parameter()]
+        [string]
+        $StoredSecretsPath,
+
+        [Parameter()]
+        [string]
+        $SecretsKeyPath,
 
         [Parameter()]
         [string]
@@ -114,9 +137,10 @@ function Initialize-DscPush
     {
         Write-Verbose "Geneterating Secrets files"
         $newSecretsFileParams = @{
-            ContentStoreRootPath = $ContentStoreRootPath
-            PartialCatalogPath = $PartialCatalogPath
-            SettingsPath = $SettingsPath
+            PartialCatalogPath   = $PartialCatalogPath
+            PartialSecretsPath   = $PartialSecretsPath
+            StoredSecretsPath    = $StoredSecretsPath
+            SecretsKeyPath       = $SecretsKeyPath
         }
         New-SecretsFile @newSecretsFileParams
     }
@@ -125,7 +149,6 @@ function Initialize-DscPush
     {
         Write-Verbose "Generating New Node Definition File from template"
         $newNodeDefinitionFileParams = @{
-            ContentStoreRootPath = $ContentStoreRootPath
             PartialCatalogPath = $PartialCatalogPath
             NodeTemplatePath = $NodeTemplatePath
             NodeDefinitionFilePath = $NodeDefinitionFilePath
@@ -137,12 +160,21 @@ function Initialize-DscPush
     {
         Write-Verbose "Updating Existing Node Definition File with Partial Catalog updates"
         $UpdateNodeDefinitionFileParams = @{
-            ContentStoreRootPath = $ContentStoreRootPath
             PartialCatalogPath = $PartialCatalogPath
             NodeDefinitionFilePath = $NodeDefinitionFilePath
             UpdateNodeDefinitionFilePath = $UpdateNodeDefinitionFilePath
         }
         Update-NodeDefinitionFile @UpdateNodeDefinitionFileParams
+    }
+
+    if ($SeedDscResources)
+    {
+        Write-Verbose "Saving required DSC Resources to the specified DSC Resources path"
+        $saveDscResourcesParams = @{
+            PartialCatalogPath = $PartialCatalogPath
+            DscResourcesPath   = $DscResourcesPath
+        }
+        Save-TargetResourceList @saveDscResourcesParams
     }
 }
 
@@ -167,7 +199,7 @@ function Initialize-DscPush
     .PARAMETER ContentStoreModulePath
         Path to the directory containing modules supporting the partial configurations.
 
-    .PARAMETER ContentStoreDscResourceStorePath
+    .PARAMETER DscResourcesPath
         Path to the directory containing the DSC Resource modules required by the partial configurations.
         
     .PARAMETER NodeDefinitionFilePath
@@ -237,7 +269,7 @@ function Initialize-DscPush
             ContentStoreRootPath             = "C:\workspace"
             ContentStoreDestPath             = "C:\ContentStore"
             ContentStoreModulePath           = "$workspace\Modules"
-            ContentStoreDscResourceStorePath = "$workspace\DscResources"
+            DscResourcesPath = "$workspace\DscResources"
             NodeDefinitionFilePath           = "$workspace\DscPushSetup\DefinitionStore\NodeDefinition.ps1"
             PartialCatalogPath               = "$workspace\DSCPushSetup\Settings\PartialCatalog.json"
             PartialDependenciesFilePath      = "$WorkshopPath\DSCPushSetup\Settings\PartialDependencies.json"
@@ -279,7 +311,7 @@ function Publish-TargetConfig
 
         [Parameter(Mandatory)]
         [string]
-        $ContentStoreDscResourceStorePath,
+        $DscResourcesPath,
 
         [Parameter(Mandatory)]
         [string]
@@ -371,21 +403,20 @@ function Publish-TargetConfig
     Write-Verbose "Add dependencies and secrets to the Configs"
     $partialProperties = @{
         PartialDependenciesFilePath = $PartialDependenciesFilePath
-        PartialSecretsPath = $PartialSecretsPath
-        StoredSecretsPath = $StoredSecretsPath
-        SecretsKeyPath = $SecretsKeyPath
-        TargetConfigs = ([ref]$targetConfigs)
+        PartialSecretsPath          = $PartialSecretsPath
+        StoredSecretsPath           = $StoredSecretsPath
+        SecretsKeyPath              = $SecretsKeyPath
+        TargetConfigs               = ([ref]$targetConfigs)
     }
     $corePartial = Add-PartialProperties @partialProperties
 
     Write-Verbose "Setup Deployment Environment"
     $initializeParams = @{
-        ContentStoreRootPath = $ContentStoreRootPath
+        ContentStoreRootPath   = $ContentStoreRootPath
         ContentStoreModulePath = $ContentStoreModulePath
-        ContentStoreDscResourceStorePath = $ContentStoreDscResourceStorePath
-        TargetIPList = $targetConfigs.Configs.TargetAdapter.NetworkAddress.IPAddressToString
-        DeploymentCredential = $DeploymentCredential
-        SanitizeModulePaths = $SanitizeModulePaths.IsPresent
+        DscResourcesPath       = $DscResourcesPath
+        TargetIPList           = $targetConfigs.Configs.TargetAdapter.NetworkAddress.IPAddressToString
+        SanitizeModulePaths    = $SanitizeModulePaths.IsPresent
     }
     $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
@@ -412,11 +443,10 @@ function Publish-TargetConfig
         {
             Write-Output "  Compiling and writing Config to directory: $mofOutputPath"
             $configParams = @{
-                TargetConfig = $config
-                ContentStoreRootPath = $ContentStoreRootPath
+                TargetConfig         = $config
                 DeploymentCredential = $DeploymentCredential
-                PartialCatalog = $PartialCatalog
-                MofOutputPath = $mofOutputPath
+                PartialCatalog       = $PartialCatalog
+                MofOutputPath        = $mofOutputPath
             }
             Write-Config @configParams
         }
@@ -424,10 +454,21 @@ function Publish-TargetConfig
         $fileCopyList = @()
         if ($config.ContentHost -and $CopyContentStore.IsPresent)
         {
+            if ([string]::IsNullOrEmpty($ContentStoreDestPath))
+            {
+                throw "ContentStore Destination path is required for designated Content Host: $($config.ConfigName)"
+            }
+
+            if (! (Test-Path $ContentStoreRootPath))
+            {
+                Write-Verbose "Creating Content Store root directory"
+                $null = New-Item -Path $ContentStoreRootPath -ItemType Directory -Force -ErrorAction Stop
+            }
+
             Write-Output "  Preparing Content Store for remote copy"
             $fileCopyList += @{
-                Path=$ContentStoreRootPath
-                Destination=$ContentStoreDestPath
+                Path        = $ContentStoreRootPath
+                Destination = $ContentStoreDestPath
             }
         }
 
@@ -435,10 +476,10 @@ function Publish-TargetConfig
         {
             Write-Output "  Preparing required DSC Resources for remote copy"
             $copyResourceParams = @{
-                TargetConfig = $config
-                ContentStoreDscResourceStorePath = $ContentStoreDscResourceStorePath
+                TargetConfig         = $config
+                DscResourcesPath     = $DscResourcesPath
                 DeploymentCredential = $DeploymentCredential
-                PartialCatalog = $partialCatalog
+                PartialCatalog       = $partialCatalog
             }
             $fileCopyList += Select-DscResource @copyResourceParams
         }
@@ -462,7 +503,7 @@ function Publish-TargetConfig
             $targetMofEncryptionParams = @{
                 MofEncryptionCertThumbprint = $MofEncryptionCertThumbprint
                 CertPassword = $MofEncryptionPKPassword
-                TargetCertPath = "$($config.Variables.LocalSourceStore)\$TargetCertDirName"
+                TargetCertPath = (Join-Path -Path $ContentStoreDestPath -ChildPath $TargetCertDirName)
                 MofEncryptionPKPath = $MofEncryptionPKPath
                 TargetPSSession = $sessions.TargetPSSession
             }
@@ -488,7 +529,6 @@ function Publish-TargetConfig
         $configParams = @{
             TargetConfig = $config
             TargetCimSession = $sessions.targetCimSession
-            ContentStoreRootPath = $ContentStoreRootPath
             DeploymentCredential = $DeploymentCredential
             PartialCatalog = $PartialCatalog
             MofOutputPath = $mofOutputPath
@@ -536,7 +576,10 @@ function Get-PSScriptParameterMetadata
 
     $parameterASTs = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
     
-    $returnObjs = $parameterASTs.where({$_.Name.VariablePath.UserPath -notin @("TargetName","OutputPath")}) | Select-Object Attributes, Name, StaticType
+    #the two variables filtered out below should be added to each partial used with this module so that these values that 
+    #are stored separately can be inserted where necessary
+    #$returnObjs = $parameterASTs.where({$_.Name.VariablePath.UserPath -notin @("TargetIP","MofOutputPath")}) | Select-Object Attributes, Name, StaticType
+    $returnObjs = $parameterASTs | Select-Object Attributes, Name, StaticType
 
     $paramCollection = @()
 
@@ -750,36 +793,52 @@ function Import-PartialCatalog
     return $partialCatalog
 }
 
-function Get-PartialMetaData
+<#
+    .SYNOPSIS
+        Saves (overwrites) all the resources required for the partials in the specified directory.
+
+    .PARAMETER PartialCatalogPath
+        Path to the Partial Catalog. The catalog is used to gather the list of required resources.
+
+    .PARAMETER DscResourcesPath
+        Path to the location the DSC Resources should be saved.
+#>
+function Save-TargetResourceList
 {
     param
     (
         [Parameter()]
-        [psobject]
-        $TargetConfig,
+        [string]
+        $PartialCatalogPath,
 
         [Parameter()]
-        [DscPartial[]]
-        $PartialCatalog
+        [string]
+        $DscResourcesPath
     )
 
-    $partialList = @()
+    Write-Verbose "Import the partial catalog"
+    $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
 
-    foreach ($partial in $TargetConfig)
+    $targetResources = ($partialCatalog.Resources.Where({!([string]::IsNullOrEmpty($_))}).Split(",")) | Select-Object -Unique
+
+    foreach ($resource in $targetResources)
     {
-        $catalogItem = $PartialCatalog.where({$_.Name -eq $partial})
-
-        if ($catalogItem)
+        $resourceDestPath = Join-Path -Path $DscResourcesPath -ChildPath $resource
+        if (Test-Path $resourceDestPath)
         {
-            $partialList += $catalogItem
+            Remove-Item -Path $resourceDestPath -Recurse -Force -ErrorAction Stop
         }
-        else
+        
+        try
         {
-            throw "Partial $partial not found at $($partial.FullName)"
+             Write-Verbose "Saving DSC Resource: $resource to $DscResourcesPath"
+             Save-Module -Name $resource -Path $DscResourcesPath -Force -ErrorAction Stop
+        }
+        catch
+        {
+            throw "Could not save DSC Resource: $resource to $DscResourcesPath"
         }
     }
-
-    return $partialList
 }
 
 <#
@@ -1308,26 +1367,22 @@ function Copy-RemoteContent
 function Initialize-DeploymentEnvironment
 {
     param
-    (        
+    (
         [Parameter(Mandatory)]
         [string]
         $ContentStoreRootPath,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
         [string]
         $ContentStoreModulePath,
 
-        [Parameter()]
+        [Parameter(Mandatory)]
         [string]
-        $ContentStoreDscResourceStorePath,
+        $DscResourcesPath,
 
         [Parameter(Mandatory)]
         [array]
         $TargetIPList,
-
-        [Parameter()]
-        [pscredential]
-        $DeploymentCredential,
 
         [Parameter()]
         [switch]
@@ -1337,7 +1392,7 @@ function Initialize-DeploymentEnvironment
     if ($SanitizeModulePaths.IsPresent)
     {
         #Get DSC Resource store
-        $resources = Get-ChildItem $ContentStoreDscResourceStorePath
+        $resources = Get-ChildItem $DscResourcesPath
         $modules = Get-ChildItem $ContentStoreModulePath
 
         #Iterate through each PS Module Path and remove all references to supporting Modules and DSC Resources
@@ -1357,12 +1412,12 @@ function Initialize-DeploymentEnvironment
 
         Write-Verbose "Sanitizing module directories complete."
     }
-
-    #Unblock the content store
-    Get-ChildItem $ContentStoreRootPath -Recurse | Unblock-File
     
     #Required modules will be copied to the C:\Program Files\WindowsPowerShell\Modules  #logged in user's documents folder
     $moduleDestPath = $env:PSModulePath.Split(";")[1]
+
+    #Unblock the content store
+    Get-ChildItem $ContentStoreRootPath -Recurse | Unblock-File
     
     #Copy Modules to host's module path
     if (!(Test-Path $moduleDestPath))
@@ -1373,7 +1428,7 @@ function Initialize-DeploymentEnvironment
     Copy-Item -Path "$ContentStoreModulePath\*" -Destination $moduleDestPath -Recurse -Force -ErrorAction Stop
 
     #Copy DSC Resources to the host's module path
-    Copy-Item -Path "$ContentStoreDscResourceStorePath\*" -Destination $moduleDestPath -Recurse -Force
+    Copy-Item -Path "$DscResourcesPath\*" -Destination $moduleDestPath -Recurse -Force
 
     # Ensure WinRM is running
     if ((Get-Service "WinRM" -ErrorAction Stop).status -eq 'Stopped') 
@@ -1500,10 +1555,6 @@ function Write-Config
         $TargetConfig,
 
         [Parameter()]
-        [string]
-        $ContentStoreRootPath,
-
-        [Parameter()]
         [pscredential]
         $DeploymentCredential,
 
@@ -1542,10 +1593,10 @@ function Write-Config
         $null = Remove-Item -Path $compiledPartialMofPath -Recurse -Force -Confirm:$false -ErrorAction Ignore
         $null = New-Item -Path $compiledPartialMofPath -ItemType Directory -Force -ErrorAction Stop
 
-        #Manually add TargetName and OutPutPath params until we can edit partials to correct this whacky step
+        #Manually add TargetIP and MofOutPutPath params to ensure configs get compiled and published correctly
         $paramList = @{}
-        $paramList.Add("TargetName", $targetIP)
-        $paramList.Add("OutPutPath", $compiledPartialMofPath)
+        #$paramList.Add("TargetIP", $targetIP)
+        #$paramList.Add("OutPutPath", $compiledPartialMofPath)
 
         #Add in the secrets from the TargetConfig object if the param type is pscredential
         $partial.Parameters.Name.ForEach({
@@ -1563,16 +1614,29 @@ function Write-Config
         try
         {
             . "$($partial.Path)" @paramList
+            
+            $ConfigData = @{ 
+                AllNodes = @(  
+                    @{ 
+                        NodeName = $TargetIP
+                        PSDscAllowPlainTextPassword = $true
+                        PSDscAllowDomainUser = $true
+                        DeploymentCredential = $DeploymentCredential
+                    }
+                ) 
+            }
+
+            $null = . $partial.Name -ConfigurationData $ConfigData -OutputPath $compiledPartialMofPath
         }
         catch
         {
             $errormsg = $_.Exception.Message
-            throw "Failed to publish: $($partial.PartialPath).`r`nActual Error: " + $errormsg
+            throw "Failed to compile: $($partial.PartialPath).`r`nActual Error: " + $errormsg
         }
     }
 }
 
-<# Er...don't use this for now #>
+<# Er...don't use this for now - was attempting on host partial compilation. doesn't seem to work that well #>
 function Copy-DscPartial
 {
     param
@@ -1612,7 +1676,7 @@ function Copy-DscPartial
 
         Copy-RemoteContent @copyPartialParams
         
-        #$null = Copy-Item -Path "$ContentStoreDscResourceStorePath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
+        #$null = Copy-Item -Path "$DscResourcesPath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
     #}
     #$null = Remove-PSSession -Session $session
 }
@@ -1626,7 +1690,7 @@ function Select-DscResource
 
         [Parameter()]
         [string]
-        $ContentStoreDscResourceStorePath,
+        $DscResourcesPath,
 
         [Parameter()]
         [pscredential]
@@ -1649,7 +1713,7 @@ function Select-DscResource
     #Create an array of all DSC resources required
     $resourcesToCopy += $targetResources.foreach({
         return @{
-            Path="$ContentStoreDscResourceStorePath\$_"
+            Path="$DscResourcesPath\$_"
             Destination="$modulePath\$_"
         }
     })
@@ -1764,10 +1828,6 @@ function Send-Config
         $TargetCimSession,
 
         [Parameter()]
-        [string]
-        $ContentStoreRootPath,
-
-        [Parameter()]
         [pscredential]
         $DeploymentCredential,
 
@@ -1851,7 +1911,6 @@ function New-PartialCatalog
     $partialCatalog = Register-DscPartialCatalog -PartialStore $PartialStorePath
     $json = ConvertTo-Json -InputObject $partialCatalog -Depth 7
     Out-File -FilePath $PartialCatalogPath -InputObject $json
-    return $PartialCatalogPath
 }
 
 function New-SecretsFile
@@ -1860,15 +1919,19 @@ function New-SecretsFile
     (
         [Parameter()]
         [string]
-        $ContentStoreRootPath,
-
-        [Parameter()]
-        [string]
         $PartialCatalogPath,
 
         [Parameter()]
         [string]
-        $SettingsPath
+        $PartialSecretsPath,
+
+        [Parameter()]
+        [string]
+        $StoredSecretsPath,
+
+        [Parameter()]
+        [string]
+        $SecretsKeyPath
     )
 
     #import the partial catalog
@@ -1882,7 +1945,7 @@ function New-SecretsFile
     })
 
     #Export the file for reference
-    $null = ConvertTo-Json $partialSecrets | Out-File "$SettingsPath\PartialSecrets.json"
+    $null = ConvertTo-Json $partialSecrets | Out-File $PartialSecretsPath
 
     #region Generate password key
     $BitArray = New-Object System.Collections.BitArray(256)
@@ -1891,7 +1954,7 @@ function New-SecretsFile
         $BitArray[$i] = [bool](Get-Random -Maximum 2)
     }
     [Byte[]] $key = ConvertTo-ByteArray -BitArray $BitArray
-    $key | Out-File "$SettingsPath\SecretsKey.json"
+    $key | Out-File $SecretsKeyPath
     #endregion
 
     #Retrieve list of unique secrets
@@ -1921,7 +1984,7 @@ function New-SecretsFile
         }
     }
 
-    $null = ConvertTo-Json $storedSecrets | Out-File "$SettingsPath\StoredSecrets.json"
+    $null = ConvertTo-Json $storedSecrets | Out-File $StoredSecretsPath
 }
 
 <#
@@ -1931,10 +1994,6 @@ function New-NodeDefinitionFile
 {
     param
     (
-        [Parameter()]
-        [string]
-        $ContentStoreRootPath,
-
         [Parameter()]
         [string]
         $PartialCatalogPath,
@@ -1970,10 +2029,6 @@ function Update-NodeDefinitionFile
 {
     param
     (
-        [Parameter()]
-        [string]
-        $ContentStoreRootPath,
-
         [Parameter()]
         [string]
         $PartialCatalogPath,

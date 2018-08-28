@@ -6,18 +6,18 @@ Param
 (
     [parameter(Mandatory = $true)]
     [string]
-    $TargetName,
+    $TargetIP,
 
     [parameter(Mandatory = $true)]
     [string]
-    $OutputPath
+    $MofOutputPath
 )
 
 Configuration HardenWinServer
 { 
     Import-DscResource –ModuleName 'PSDesiredStateConfiguration' -ModuleVersion 1.1
 
-    Node $TargetName 
+    Node $TargetIP 
     {
         foreach($regkey in $regkeys)
         {
@@ -43,4 +43,4 @@ $regkeys = @(
     @("https", "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\EscDomains\127.0.0.1", "https", "1", "DWORD")
 )
 
-$null = HardenWinServer -OutputPath $OutputPath
+$null = HardenWinServer -OutputPath $MofOutputPath

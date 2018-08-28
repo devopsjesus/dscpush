@@ -5,14 +5,6 @@
 Param
 (
     [parameter(Mandatory)]
-    [string]
-    $TargetName,
-
-    [parameter(Mandatory)]
-    [string]
-    $OutputPath,
-
-    [parameter(Mandatory)]
     [ValidateScript({[System.Uri]::CheckHostName($_) -eq 'Dns'})]
     [ValidateLength(1,15)]
     [string]
@@ -46,7 +38,7 @@ Configuration OSCore
     Import-DscResource -ModuleName "xNetworking"
     Import-DscResource -ModuleName "xComputerManagement"
  
-    Node $TargetName
+    Node $TargetIP
     {
         #Collate Domain Join Partial object Dependencies
         $domainJoinDependsOn = @()
@@ -72,12 +64,12 @@ Configuration OSCore
 
             if ($adapterMAC)
             {
-                $targetAdapter = Invoke-Command -ComputerName $TargetName -ScriptBlock { Get-NetAdapter | Where-Object {$_.MacAddress -eq $using:adapterMAC}} -Credential $DomainCredential -ErrorAction SilentlyContinue
+                $targetAdapter = Invoke-Command -ComputerName $TargetIP -ScriptBlock { Get-NetAdapter | Where-Object {$_.MacAddress -eq $using:adapterMAC}} -Credential $DomainCredential -ErrorAction SilentlyContinue
                 $uid = $adapterMAC
             }
             else
             {
-                $targetAdapter = Invoke-Command -ComputerName $TargetName -ScriptBlock { Get-NetIPInterface -InterfaceAlias $using:adapterAlias -AddressFamily $using:addressFamily } -Credential $DomainCredential -ErrorAction SilentlyContinue
+                $targetAdapter = Invoke-Command -ComputerName $TargetIP -ScriptBlock { Get-NetIPInterface -InterfaceAlias $using:adapterAlias -AddressFamily $using:addressFamily } -Credential $DomainCredential -ErrorAction SilentlyContinue
                 $uid = $adapterAlias
             }
 
@@ -152,15 +144,3 @@ Configuration OSCore
 }
 
 $networks = ConvertFrom-Json $NetworkConfig
-
-$ConfigData = @{ 
-    AllNodes = @(  
-        @{ 
-            NodeName = $TargetName
-            PSDscAllowPlainTextPassword = $true
-            PSDscAllowDomainUser = $true
-        }
-    ) 
-} 
-
-$null = OSCore -ConfigurationData $ConfigData -OutputPath $OutputPath
