@@ -11,38 +11,52 @@
 
     .Parameter vmNetworkAddressList
         The IP addresses of the VMs you built.  Hopefully with code...
+
+    .EXAMPLE
+        .\deployButton.Tests.ps1 -Credential $(Get-Credential administrator) -VmNetworkAddressList @("192.168.1.25","192.168.1.26")
 #>
 param(
-    $Credential = (New-Object System.Management.Automation.PSCredential (“administrator”, (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
+    [Parameter(Mandatory)]
+    [pscredential]
+    $Credential,
 
-    $vmNetworkAddressList = @("192.168.1.24")
+    [Parameter(Mandatory)]
+    [string[]]
+    $VmNetworkAddressList
 )
 
 Describe "DscPush Workshop Deployment" {
     Context "VM DSC State" {
         
         #region Prepare for test
-        $cimSessions = New-CimSession -ComputerName $vmNetworkAddressList -Credential $Credential
+        $cimSessions = New-CimSession -ComputerName $VmNetworkAddressList -Credential $Credential
         Stop-DscConfiguration -CimSession $cimSessions -WarningAction Ignore
         #endregion
 
         #populate the testCases var for Pester to run and report on each target
-        $testCases = $cimSessions.ForEach({@{cimSession = $_}})
+        $testCases = $cimSessions.ForEach({@{cimSession = $_;ComputerName=$_.ComputerName}})
 
-        It "Start-DscConfiguration should run successfully on <cimSession>" -TestCases $testCases {
+        It "<ComputerName> should run Start-DscConfiguration successfully" -TestCases $testCases {
             param ( $cimSession )
             { Start-DscConfiguration -CimSession $cimSession -Wait -UseExisting -ErrorAction Stop } | Should Not Throw
         }
-        
-        It "Test-DscConfiguration should return True for <cimSession>"  -TestCases $testCases {
+
+        It "<ComputerName> should return 'Success' from Get-DscConfigurationStatus" -TestCases $testCases {
             param ( $cimSession )
-            $testDscReturn = Test-DscConfiguration -CimSession $cimSession
+            $testResult = Get-DscConfigurationStatus -CimSession $cimSession -ErrorAction Stop
+            "$($testResult.ResourcesNotInDesiredState.ResourceID)" | Should Be ""
+            $testResult.Status | Should Be 'Success'
+        }
+        
+        It "<ComputerName> should return True from Test-DscConfiguration"  -TestCases $testCases {
+            param ( $cimSession )
+            $testDscReturn = Test-DscConfiguration -CimSession $cimSession -ErrorAction Stop
             $testDscReturn | Should Be 'True'
         }
 
-        It "Get-DscConfiguration should run successfully on <cimSession>"  -TestCases $testCases {
+        It "<ComputerName> should run Get-DscConfiguration without throwing"  -TestCases $testCases {
             param ( $cimSession )
-            { Get-DscConfiguration -CimSession $cimSession } | Should Not Throw
+            { Get-DscConfiguration -CimSession $cimSession -ErrorAction Stop } | Should Not Throw
         }
     }
 }

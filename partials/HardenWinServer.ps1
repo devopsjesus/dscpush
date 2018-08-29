@@ -2,16 +2,6 @@
     .SYNOPSIS
         Windows Server hardening.
 #>
-Param
-(
-    [parameter(Mandatory = $true)]
-    [string]
-    $TargetIP,
-
-    [parameter(Mandatory = $true)]
-    [string]
-    $MofOutputPath
-)
 
 Configuration HardenWinServer
 { 
@@ -42,5 +32,3 @@ $regkeys = @(
     @("http", "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\EscDomains\127.0.0.1", "http", "1", "DWORD"),
     @("https", "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\EscDomains\127.0.0.1", "https", "1", "DWORD")
 )
-
-$null = HardenWinServer -OutputPath $MofOutputPath

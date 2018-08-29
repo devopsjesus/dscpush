@@ -7,7 +7,10 @@
     $DeployInfrastructure = $true,
     
     [string]
-    $VhdPath = "C:\Virtualharddisks\win2016core.vhdx",
+    $VhdPath = "C:\VirtualHardDisks\win2016core.vhdx",
+
+    [ipaddress]
+    $HostIpAddress = "192.168.1.24",
 
     [pscredential]
     $DeploymentCredential = (New-Object System.Management.Automation.PSCredential ("administrator", (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force)))
@@ -83,15 +86,17 @@ Initialize-DscPush @initDeploymentSettings
 #endregion Init
 
 #region Infrastructure deployment
-#this is put after the init section so that the password collection happens right after 
-#the script starts and we don't have to wait for VMs to boot
+<#This region will deploy VM(s) to Hyper-V if the DeployInfrastructure switch is present.
+  This is put after the init section so that the password collection happens right after 
+  the script starts and we don't have to wait for VMs to boot.
+#>
 if ($DeployInfrastructure)
 {
     $hyperVDeployScriptPath = "$WorkspacePath\deployVM-HyperV.ps1"
     $deploymentParams = @{
         VhdPath                = $VhdPath
         VSwitchName            = "Internet-NIC1"
-        HostIpAddress          = "192.168.1.23"
+        HostIpAddress          = $HostIpAddress
         DnsServer              = "192.168.1.254"
 	    Credential             = $DeploymentCredential
         AdapterCount           = 1
@@ -107,8 +112,7 @@ if ($DeployInfrastructure)
 #region Publish - second step after getting your workspace setup is to publish DSC configurations
 <#These are the recommended settings for initial deployments.
   Follow up deployments can often turn off the CompSanitizeModulePaths, CopyContentStore & ForceResourceCopy switches to save time
-  This sample shows Mof Encryption via the $mofEncryptionSettings var
-#>
+  This sample shows Mof Encryption via the $mofEncryptionSettings var.#>
 $publishTargetSettings = @{
     CompilePartials             = $true
     SanitizeModulePaths         = $true
@@ -132,5 +136,39 @@ $publishTargetSettings += $mofEncryptionSettings
 Publish-TargetConfig @publishTargetSettings
 #endregion Publish
 
-<#region Update Node Definition File
+#region Update Node Definition File
+<# This section will allow for updating a Node Definition File from an existing Node Definition File, due to
+an action requiring a re-examination of the variables stored in each Target Config object, any partial parameter
+changes, etc. #>
+$UpdateNodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinitionTwoTargets.ps1"
+$initDeploymentSettings = @{
+    UpdateNodeDefinitionFile     = $true
+    PartialCatalogPath           = $partialCatalogPath
+    NodeDefinitionFilePath       = $NodeDefinitionFilePath
+    UpdateNodeDefinitionFilePath = $UpdateNodeDefinitionFilePath
+}
+Initialize-DscPush @initDeploymentSettings
+
+$nodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinitionTwoTargets.ps1"
+$publishTargetSettings = @{
+    CompilePartials             = $true
+    SanitizeModulePaths         = $false
+    CopyContentStore            = $true
+    ForceResourceCopy           = $true
+    DeploymentCredential        = $DeploymentCredential
+    ContentStoreRootPath        = $contentStoreRootPath
+    ContentStoreDestPath        = $ContentStoreDestPath
+    ContentStoreModulePath      = $contentStoreModulePath
+    DscResourcesPath            = $DscResourcesPath
+    NodeDefinitionFilePath      = $nodeDefinitionFilePath
+    PartialCatalogPath          = $partialCatalogPath
+    PartialDependenciesFilePath = $partialDependenciesFilePath
+    PartialSecretsPath          = $partialSecretsPath
+    StoredSecretsPath           = $storedSecretsPath
+    SecretsKeyPath              = $secretsKeyPath
+    MofOutputPath               = $mofOutputPath
+    TargetLcmSettings           = $targetLCMSettings
+}
+$publishTargetSettings += $mofEncryptionSettings
+Publish-TargetConfig @publishTargetSettings
 #endregion #>
