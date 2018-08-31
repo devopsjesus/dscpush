@@ -10,7 +10,10 @@
     $VhdPath = "C:\VirtualHardDisks\win2016core.vhdx",
 
     [ipaddress]
-    $HostIpAddress = "192.168.1.24",
+    $HostIpAddress = "192.0.0.247",
+
+    [string]
+    $VSwitchName = "DSC-vSwitch1",
 
     [pscredential]
     $DeploymentCredential = (New-Object System.Management.Automation.PSCredential ("administrator", (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force)))
@@ -95,9 +98,8 @@ if ($DeployInfrastructure)
     $hyperVDeployScriptPath = "$WorkspacePath\deployVM-HyperV.ps1"
     $deploymentParams = @{
         VhdPath                = $VhdPath
-        VSwitchName            = "Internet-NIC1"
+        VSwitchName            = $VSwitchName
         HostIpAddress          = $HostIpAddress
-        DnsServer              = "192.168.1.254"
 	    Credential             = $DeploymentCredential
         AdapterCount           = 1
         TargetSubnet           = "255.255.255.0"
@@ -140,6 +142,7 @@ Publish-TargetConfig @publishTargetSettings
 <# This section will allow for updating a Node Definition File from an existing Node Definition File, due to
 an action requiring a re-examination of the variables stored in each Target Config object, any partial parameter
 changes, etc. #>
+<#
 $UpdateNodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinitionTwoTargets.ps1"
 $initDeploymentSettings = @{
     UpdateNodeDefinitionFile     = $true

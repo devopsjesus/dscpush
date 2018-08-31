@@ -105,6 +105,12 @@ Configuration OSCore
                 InterfaceAlias = $interfaceAlias
                 AddressFamily = $addressFamily
             }
+
+            xDnsConnectionSuffix "$interfaceAlias-DnsConnectionSuffix"
+            {
+                InterfaceAlias = $interfaceAlias
+                ConnectionSpecificSuffix = $DomainName
+            }
         }
 
         Registry NlaDelayedStart
@@ -128,7 +134,7 @@ Configuration OSCore
             xComputer JoinDomain
             {
                 Name = $ComputerName
-                DomainName = $DomainName 
+                DomainName = $DomainName
                 Credential = $(New-Object System.Management.Automation.PSCredential("$DomainName\$($DomainCredential.UserName)", $DomainCredential.Password))
                 DependsOn = $domainJoinDependsOn
             }
