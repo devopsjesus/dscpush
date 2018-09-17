@@ -27,15 +27,6 @@ $DscTest.Variables += @{
     DomainCredential='|pscredential|'
     DomainName='dscpush.local'
     JoinDomain='false'
-    NetworkConfig= '[
-    {
-        "SubnetBitMask":  24,
-        "NetworkCategory":  "DomainAuthenticated",
-        "MACAddress":  "00-15-5d-36-F3-12",
-        "IPAddress":  "192.168.1.25",
-        "DNSServer":  "192.168.1.25"
-    }
-]'
 }
 $Master.Configs += $DscTest
 #endregion Target Config: DscTest
