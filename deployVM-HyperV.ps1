@@ -3,11 +3,11 @@
 param(
     $VhdPath = "C:\Virtualharddisks\win2016core.vhdx",
 
-    $VSwitchName = "Internet-NIC1",
+    $VSwitchName = "RPS-vSwitch1",
     
-    $HostIpAddress = "192.168.1.23",
+    $HostIpAddress = "192.0.0.247",
     
-    $DnsServer = "192.168.1.254",
+    $DnsServer = "192.0.0.25",
 
 	[parameter(mandatory)]
     [pscredential]
@@ -19,10 +19,12 @@ param(
 
     [switch]$Clobber = $true,
 
-    [switch]$DifferencingDisks,
+    [switch]$DifferencingDisks = $true,
     
     $NodeDefinitionFilePath = "C:\Library\deploy\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
 )
+
+Import-Module Hyper-V
 
 if (!(Get-CimInstance -Namespace root\virtualization\v2 -Class Msvm_VirtualSystemManagementService -ErrorAction Ignore))
 {

@@ -1,22 +1,32 @@
 ﻿param
 (
+    [parameter()]
     [string]
     $WorkspacePath = $PSScriptRoot,
-
+    
+    [parameter()]
     [switch]
     $DeployInfrastructure = $true,
     
+    [parameter()]
     [string]
-    $VhdPath = "C:\VirtualHardDisks\win2016core.vhdx",
-
+    $VhdPath = "C:\VirtualHardDisks\win2016core-20180914.vhdx",
+    
+    [parameter()]
     [ipaddress]
     $HostIpAddress = "192.0.0.247",
-
+    
+    [parameter()]
     [string]
     $VSwitchName = "DSC-vSwitch1",
-
+    
+    [parameter()]
     [pscredential]
-    $DeploymentCredential = (New-Object System.Management.Automation.PSCredential ("administrator", (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force)))
+    $DeploymentCredential = (New-Object System.Management.Automation.PSCredential ("administrator", (ConvertTo-SecureString "P@ssw0rd123" -AsPlainText -Force))),
+
+    [parameter()]
+    [string]
+    $NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
 )
 
 #region vars
@@ -30,9 +40,6 @@ $targetLCMSettings = @{
     AllowModuleOverwrite             = $true
     DebugMode                        = "None"
 }
-
-#Node Definition file
-$nodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
 
 #shared vars
 $dscPushModulePath = "$WorkspacePath\Modules\DSCPush"
@@ -72,6 +79,7 @@ Import-Module -FullyQualifiedName $dSCPushModulePath -ErrorAction Stop
 <#These settings will:
     Generate a new partial catalog (required for first deployments and after any change to partials or partial path
     Generate secrets for all pscredential Partial Configuration parameters (POPUPS WILL APPEAR!)
+    The SeedDscResources param will attempt to download the DSC Resources required by the configs from PSGallery
 #>
 $initDeploymentSettings = @{
     GeneratePartialCatalog = $true
@@ -91,7 +99,8 @@ Initialize-DscPush @initDeploymentSettings
 #region Infrastructure deployment
 <#This region will deploy VM(s) to Hyper-V if the DeployInfrastructure switch is present.
   This is put after the init section so that the password collection happens right after 
-  the script starts and we don't have to wait for VMs to boot.
+  the script starts and we don't have to wait for VMs to boot. In practice, infrastructure
+  would be deployed before any configuraiton happens.
 #>
 if ($DeployInfrastructure)
 {
@@ -105,7 +114,7 @@ if ($DeployInfrastructure)
         TargetSubnet           = "255.255.255.0"
         Clobber                = $true
         DifferencingDisks      = $true
-        NodeDefinitionFilePath = $nodeDefinitionFilePath
+        NodeDefinitionFilePath = $NodeDefinitionFilePath
     }
     & $hyperVDeployScriptPath @deploymentParams
 }
@@ -125,7 +134,7 @@ $publishTargetSettings = @{
     ContentStoreDestPath        = $ContentStoreDestPath
     ContentStoreModulePath      = $contentStoreModulePath
     DscResourcesPath            = $DscResourcesPath
-    NodeDefinitionFilePath      = $nodeDefinitionFilePath
+    NodeDefinitionFilePath      = $NodeDefinitionFilePath
     PartialCatalogPath          = $partialCatalogPath
     PartialDependenciesFilePath = $partialDependenciesFilePath
     PartialSecretsPath          = $partialSecretsPath
@@ -143,16 +152,17 @@ Publish-TargetConfig @publishTargetSettings
 an action requiring a re-examination of the variables stored in each Target Config object, any partial parameter
 changes, etc. #>
 <#
-$UpdateNodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinitionTwoTargets.ps1"
+$UpdateNodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinitionUpdate.ps1"
 $initDeploymentSettings = @{
+    GeneratePartialCatalog       = $true
     UpdateNodeDefinitionFile     = $true
     PartialCatalogPath           = $partialCatalogPath
+    PartialStorePath             = $partialStorePath
     NodeDefinitionFilePath       = $NodeDefinitionFilePath
     UpdateNodeDefinitionFilePath = $UpdateNodeDefinitionFilePath
 }
 Initialize-DscPush @initDeploymentSettings
 
-$nodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinitionTwoTargets.ps1"
 $publishTargetSettings = @{
     CompilePartials             = $true
     SanitizeModulePaths         = $false
@@ -163,7 +173,7 @@ $publishTargetSettings = @{
     ContentStoreDestPath        = $ContentStoreDestPath
     ContentStoreModulePath      = $contentStoreModulePath
     DscResourcesPath            = $DscResourcesPath
-    NodeDefinitionFilePath      = $nodeDefinitionFilePath
+    NodeDefinitionFilePath      = $UpdateNodeDefinitionFilePath #This changes
     PartialCatalogPath          = $partialCatalogPath
     PartialDependenciesFilePath = $partialDependenciesFilePath
     PartialSecretsPath          = $partialSecretsPath

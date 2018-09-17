@@ -421,7 +421,7 @@ function Publish-TargetConfig
     $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
     Write-Verbose "Deploy Configs"
-    foreach ($config in $targetConfigs.Configs)#.where({$_.configname -eq 'dscpushch'}))
+    foreach ($config in $targetConfigs.Configs)#.where({$_.configname -eq 'DscMember'}))
     {
         Write-Output "Preparing Config: $($config.ConfigName)"
 

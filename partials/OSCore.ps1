@@ -20,13 +20,6 @@ Param
     [pscredential]
     $DomainCredential,
 
-    [parameter(Mandatory)]
-    $NetworkConfig,
-
-    [parameter(Mandatory)]
-    [string]
-    $ContentStore,
-
     [parameter()]
     [string]
     $JoinDomain
@@ -43,69 +36,56 @@ Configuration OSCore
         #Collate Domain Join Partial object Dependencies
         $domainJoinDependsOn = @()
 
-        foreach($network in $networks)
+        #Transfer values from in-scope DscPush type TargetConfig object $config
+        $adapterMAC     = $config.TargetAdapter.PhysicalAddress
+        $interfaceAlias = $config.TargetAdapter.InterfaceAlias
+        $ipAddress      = $config.TargetAdapter.NetworkAddress[0]
+        $defaultGateway = $config.TargetAdapter.Gateway
+        $netmask        = $config.TargetAdapter.SubnetBits
+        $dnsAddress     = $config.TargetAdapter.DNSAddress
+        $networkProfile = $config.TargetAdapter.NetworkCategory
+        $addressFamily  = $config.TargetAdapter.AddressFamily
+        
+        if ($adapterMAC)
         {
-            $adapterMAC = $network.MACAddress
-            $adapterAlias = $network.Alias
-            $ipAddress = $network.IPAddress
-            $defaultGateway = $network.DefaultGateway
-            $netmask = $network.SubnetBitMask
-            $dnsAddress = $network.DNSServer
-            $networkProfile = $network.NetworkCategory
-
-            if ($ipAddress.Contains(":"))
-            {
-                $addressFamily = "IPv6"
-            }
-            else
-            {
-                $addressFamily = "IPv4"
-            }
-
-            if ($adapterMAC)
-            {
-                $targetAdapter = Invoke-Command -ComputerName $TargetIP -ScriptBlock { Get-NetAdapter | Where-Object {$_.MacAddress -eq $using:adapterMAC}} -Credential $DomainCredential -ErrorAction SilentlyContinue
-                $uid = $adapterMAC
-            }
-            else
-            {
-                $targetAdapter = Invoke-Command -ComputerName $TargetIP -ScriptBlock { Get-NetIPInterface -InterfaceAlias $using:adapterAlias -AddressFamily $using:addressFamily } -Credential $DomainCredential -ErrorAction SilentlyContinue
-                $uid = $adapterAlias
-            }
-
-            $interfaceAlias = $null
+            $targetAdapter = Invoke-Command -ComputerName $TargetIP -ScriptBlock { Get-NetAdapter | Where-Object {$_.MacAddress -eq $using:adapterMAC}} -Credential $DomainCredential -ErrorAction Stop
             $interfaceAlias = $targetAdapter.InterfaceAlias
+        }
+        <#uncomment if you want to confirm the interface alias is correct, but otherwise, this call is unnecessary
+        else
+        {
+            $targetAdapter = Invoke-Command -ComputerName $TargetIP -ScriptBlock { Get-NetIPInterface -InterfaceAlias $using:adapterAlias -AddressFamily $using:addressFamily } -Credential $DomainCredential -ErrorAction Stop
+        }#>
 
-            if ($null -eq $interfaceAlias)
+        xIPAddress "$interfaceAlias-$ipAddress"
+        {
+            IPAddress = "$ipAddress/$netmask"
+            InterfaceAlias = $interfaceAlias
+            AddressFamily = $addressFamily
+        }
+            
+        if ($defaultGateway)
+        {
+            xDefaultGatewayAddress "$interfaceAlias-$defaultGateway"
             {
-                Write-Error "Network adapter with provided identifier ($uid) not found on target." -ErrorAction Continue
-                break
-            }
-
-            xIPAddress "$interfaceAlias-$ipAddress"
-            {
-                IPAddress = "$ipAddress/$netmask"
+                Address = $defaultGateway
                 InterfaceAlias = $interfaceAlias
                 AddressFamily = $addressFamily
             }
-            
-            if ($defaultGateway)
-            {
-                xDefaultGatewayAddress "$interfaceAlias-$defaultGateway"
-                {
-                    Address = $defaultGateway
-                    InterfaceAlias = $interfaceAlias
-                    AddressFamily = $addressFamily
-                }
-            }
+        }
 
+        if ($dnsAddress)
+        {
             xDNSServerAddress "$interfaceAlias-$dnsAddress"
             {
                 Address = $dnsAddress
                 InterfaceAlias = $interfaceAlias
                 AddressFamily = $addressFamily
             }
+        }
 
+        if ($DomainName)
+        {
             xDnsConnectionSuffix "$interfaceAlias-DnsConnectionSuffix"
             {
                 InterfaceAlias = $interfaceAlias
@@ -121,12 +101,15 @@ Configuration OSCore
             ValueType = "DWORD"
         }
 
-        Registry DnsSearchSuffix
+        if ($DomainName)
         {
-            Key = "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
-            ValueName = "SearchList"
-            ValueData = $DomainName
-            ValueType = "String"
+            Registry DnsSearchSuffix
+            {
+                Key = "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
+                ValueName = "SearchList"
+                ValueData = $DomainName
+                ValueType = "String"
+            }
         }
 
         if($JoinDomain -eq 'true')
@@ -148,5 +131,3 @@ Configuration OSCore
         }
     }
 }
-
-$networks = ConvertFrom-Json $NetworkConfig
