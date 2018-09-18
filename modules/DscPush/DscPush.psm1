@@ -823,6 +823,17 @@ function Save-TargetResourceList
 
     foreach ($resource in $targetResources)
     {
+        #Find the module first, in order to skip custom resources
+        try
+        {
+            $null = Find-Module -Name $resource -ErrorAction Stop
+        }
+        catch
+        {
+            Write-Warning "Could not find module $resource."
+            Continue
+        }
+
         $resourceDestPath = Join-Path -Path $DscResourcesPath -ChildPath $resource
         if (Test-Path $resourceDestPath)
         {
@@ -831,12 +842,19 @@ function Save-TargetResourceList
         
         try
         {
+            $currentProgressPreference = $ProgressPreference
+            $ProgressPreference = 'SilentlyContinue'
+
              Write-Verbose "Saving DSC Resource: $resource to $DscResourcesPath"
              Save-Module -Name $resource -Path $DscResourcesPath -Force -ErrorAction Stop
         }
         catch
         {
             throw "Could not save DSC Resource: $resource to $DscResourcesPath"
+        }
+        finally
+        {
+            $ProgressPreference = $currentProgressPreference
         }
     }
 }
