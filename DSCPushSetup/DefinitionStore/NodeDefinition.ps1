@@ -15,7 +15,7 @@ $DscTest = New-TargetConfig -Properties @{
 }
 $DscTestAdapterProperties = @{
     PhysicalAddress = '00-15-5d-36-F3-10'
-    NetworkAddress  = '192.168.1.25'
+    NetworkAddress  = '192.0.0.30'
     SubnetBits      = '24'
     AddressFamily   = 'IPv4'
     Description     = ''

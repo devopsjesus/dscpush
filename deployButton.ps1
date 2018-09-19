@@ -2,7 +2,7 @@
 (
     [parameter()]
     [string]
-    $WorkspacePath = $PSScriptRoot,
+    $WorkspacePath = "C:\dscpush-master",
     
     [parameter()]
     [switch]
