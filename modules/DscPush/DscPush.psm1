@@ -629,85 +629,48 @@ function Get-PSScriptParameterMetadata
     .PARAMETER DscConfigurationPath
         Path to DSC Configuration.
 #>
-function Get-ImportedDscResource
+function Get-RequiredDscResourceList
 {
     Param
     (
         [Parameter(mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [ValidatePattern(".*.ps1$")]
+        [ValidateScript({Test-Path $_})]
         [string]
-        $DscConfigurationPath 
+        $DscConfigurationPath
     )
     
-    # add a short C# function because PowerShell doesn't handle removing the parents from a commandElementAst very well
-    Add-Type -TypeDefinition @"
-using System;
-using System.Collections.Generic;
-using System.Management.Automation;
-using System.Management.Automation.Language;
-
-public class AstHelper
-{
-    public IEnumerable<CommandElementAst> StripParent(List<CommandElementAst> commandElementAsts)
-    {
-        var asts = new List<CommandElementAst>();
-
-        foreach (var ast in commandElementAsts)
-        {
-            asts.Add(ast.Copy() as CommandElementAst);
-        }
-
-        return asts;
-    }
-}
-"@ 
-    
-    # parse powershell to AST tree
+    #Parse powershell script to AST
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($DscConfigurationPath, [ref]$null, [ref]$null)
 
-    # find every Import-DscResource cmdlet used
-    $dyanmicKeywordStatementAsts = $ast.FindAll({($args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]) -and ($args[0].CommandElements.Value -contains 'Import-DscResource')}, $true) 
+    #Find every Import-DscResource cmdlet
+    [array]$resourceStatements = $ast.FindAll({($args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]) -and ($args[0].CommandElements.Value -contains 'Import-DscResource')}, $true) 
     
-    $resourceList = @()
-
-    foreach($dyanmicKeywordStatementAst in $dyanmicKeywordStatementAsts)
-    {   
-        # strip the parent from each commandElement of the DynamicKeywordStatementAst because creating a commandAst requires the elemets have no parents 
-        $astHelper = New-Object AstHelper
-    
-        $noParents = $astHelper.StripParent($dyanmicKeywordStatementAst.CommandElements)
-        
-        # convert to commandAst so we can use the StaticParameterbinder and not have to do it ourself
-        $commandAst = [System.Management.Automation.Language.CommandAst]::new($dyanmicKeywordStatementAst.Extent, $noParents, [System.Management.Automation.Language.TokenKind]::Unknown, $null)
-    
-        $boundParams = [System.Management.Automation.Language.StaticParameterBinder]::BindCommand($commandAst, $true)
-    
-        # Check each way to add a resource and add them to the list if found
-        $resourceArray = @()
-
-        if($null -ne $boundParams.BoundParameters['ModuleName'])
-        {
-            $resourceArray += $boundParams.BoundParameters['ModuleName'].Value.FindAll({$args[0] -is [System.Management.Automation.Language.ConstantExpressionAst]}, $true).Value
-        }
-    
-        if($null -ne $boundParams.BoundParameters['Module'])
-        {
-            $resourceArray += $boundParams.BoundParameters['Module'].Value.FindAll({$args[0] -is [System.Management.Automation.Language.ConstantExpressionAst]}, $true).Value
-        }
-    
-        if($null -ne $boundParams.BoundParameters['Name'])
-        {
-            $names = $boundParams.BoundParameters['Name'].Value.FindAll({$args[0] -is [System.Management.Automation.Language.ConstantExpressionAst]}, $true).Value
-            Throw "Name parameter for Import-DscResource is not supported. Please use -ModuleName $names in $DscPartialPath"
-        }
-
-        $resourceList += $resourceArray.where({$_ -ne 'PSDesiredStateConfiguration'})
+    #Because the syntax and use of the Import-DscResource is highly regulated, we can make some assumptions here:
+    #ModuleName must be the first parameter specified, so it's value is stored in the third index of the CommandElements array
+    #ModuleVersion would always be specified after the ModuleName parameter, so it would be in the fifth index of the array
+    #We disallow use of the Name parameter here, because it's not supported or suggested
+    if ("Name" -in $resourceStatements.CommandElements.ParameterName)
+    {
+        throw "$DscConfigurationPath - Use of the 'Name' parameter when calling Import-DscResource is not supported."
     }
 
-    $resources = $resourceList -join ","
+    $resourceList = @()
 
-    return $resources
+    foreach ($resource in $resourceStatements)
+    { 
+        if ($resource.CommandElements.Count -lt 5)
+        {
+            throw "$DscConfigurationPath - Missing ModuleVersion parameter in config."
+        }
+        $resourceList += @{
+            ModuleName = $resource.CommandElements[2].Value
+            ModuleVersion = $resource.CommandElements[4].Value
+        }
+    }
+
+    return $resourceList.Where({$_.ModuleName -ne "PSDesiredStateConfiguration"})
 }
 
 <#
@@ -761,7 +724,7 @@ function Register-DscPartialCatalog
         #array wrapper to force array type even for single object returns to maintain data consistency
         $partialParams = @(Get-PSScriptParameterMetadata -DscConfigurationPath $partial.FullName)
 
-        $partialResources = Get-ImportedDscResource -DscConfigurationPath $partial.FullName
+        $partialResources = Get-RequiredDscResourceList -DscConfigurationPath $partial.FullName
 
         $partialValues = @{
             Name = $partialConfigurationName
@@ -769,7 +732,7 @@ function Register-DscPartialCatalog
             Resources = $partialResources
             Parameters = $partialParams
         }
-        $partialObj = New-DscPartial  @partialValues
+        $partialObj = New-DscPartial @partialValues
 
         $partialCatalog += $partialObj
     }
@@ -819,14 +782,14 @@ function Save-TargetResourceList
     Write-Verbose "Import the partial catalog"
     $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
 
-    $targetResources = ($partialCatalog.Resources.Where({!([string]::IsNullOrEmpty($_))}).Split(",")) | Select-Object -Unique
+    $targetResources = $partialCatalog.Resources.Where({!([string]::IsNullOrEmpty($_))}) | Select-Object -Property ModuleName,ModuleVersion -Unique
 
     foreach ($resource in $targetResources)
     {
         #Find the module first, in order to skip custom resources
         try
         {
-            $null = Find-Module -Name $resource -ErrorAction Stop
+            $null = Find-Module -Name $resource.ModuleName -RequiredVersion $resource.ModuleVersion -ErrorAction Stop
         }
         catch
         {
@@ -834,7 +797,7 @@ function Save-TargetResourceList
             Continue
         }
 
-        $resourceDestPath = Join-Path -Path $DscResourcesPath -ChildPath $resource
+        $resourceDestPath = Join-Path -Path $DscResourcesPath -ChildPath $resource.ModuleName
         if (Test-Path $resourceDestPath)
         {
             Remove-Item -Path $resourceDestPath -Recurse -Force -ErrorAction Stop
@@ -846,7 +809,7 @@ function Save-TargetResourceList
             $ProgressPreference = 'SilentlyContinue'
 
              Write-Verbose "Saving DSC Resource: $resource to $DscResourcesPath"
-             Save-Module -Name $resource -Path $DscResourcesPath -Force -ErrorAction Stop
+             Save-Module -Name $resource.ModuleName -RequiredVersion $resource.ModuleVersion -Path $DscResourcesPath -Force -ErrorAction Stop
         }
         catch
         {
@@ -1726,7 +1689,7 @@ function Select-DscResource
     $modulePath = "$env:ProgramFiles\WindowsPowerShell\Modules"
 
     #Retrive unique list of required DSC Resources
-    $targetResources = ($targetPartials.Resources.Where({!([string]::IsNullOrEmpty($_))}).Split(",")) | Select-Object -Unique
+    $targetResources = ($targetPartials.Resources.Where({!([string]::IsNullOrEmpty($_.ModuleName))}).Split(",")) | Select-Object -Unique
 
     #Create an array of all DSC resources required
     $resourcesToCopy += $targetResources.foreach({
@@ -2085,7 +2048,7 @@ Class DscPartial
     [string]
     $Path
     
-    [string]
+    [array]
     $Resources
 
     [array]
@@ -2094,7 +2057,7 @@ Class DscPartial
     DscPartial ()
     {}
 
-    DscPartial ( [string]$Name, [string]$Path, [string]$Resources, [string]$Parameters)
+    DscPartial ( [string]$Name, [string]$Path, [array]$Resources, [array]$Parameters)
     {
         $this.Name = $Name
         $this.Path = $Path
@@ -2474,7 +2437,7 @@ function New-DscPartial
         $Path,
     
         [parameter()]
-        [string]
+        [hashtable[]]
         $Resources,
 
         [parameter()]
