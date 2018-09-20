@@ -551,34 +551,39 @@ function Publish-TargetConfig
 
 <#
     .SYNOPSIS
-        Returns the parameter block of a PowerShell script.
+        Retrieves the AST of a DSC script and returns pertinent parameter metadata.
+
+    .DESCRIPTION
+        This function will parse a PS script's parameter block into AST and return all metadata.  This will include
+        mandatory flags, other validations, and the parameter type.
 
     .PARAMETER DscConfigurationPath
         Path to the PowerShell script.
+
+    .EXAMPLE
+        Get-PSScriptPatameterMetadata -DscConfigurationPath
 #>
 function Get-PSScriptParameterMetadata
 {
     Param
     (
-        [Parameter(mandatory = $true)]
+        [Parameter(mandatory)]
         [ValidateNotNullOrEmpty()]
+        [ValidateScript({Test-Path $_})]
         [ValidatePattern(".*.ps1$")]
         [string]
-        $DscConfigurationPath
+        $Path
     )
 
-    if($(Test-Path -Path $DscConfigurationPath) -eq $false)
+    if($(Test-Path -Path $Path) -eq $false)
     {
-        Throw "Failed to access $DscConfigurationPath"
+        Throw "Failed to access $Path"
     }
 
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($DscConfigurationPath, [ref]$null, [ref]$null)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
 
     $parameterASTs = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
     
-    #the two variables filtered out below should be added to each partial used with this module so that these values that 
-    #are stored separately can be inserted where necessary
-    #$returnObjs = $parameterASTs.where({$_.Name.VariablePath.UserPath -notin @("TargetIP","MofOutputPath")}) | Select-Object Attributes, Name, StaticType
     $returnObjs = $parameterASTs | Select-Object Attributes, Name, StaticType
 
     $paramCollection = @()
@@ -626,7 +631,7 @@ function Get-PSScriptParameterMetadata
     .SYNOPSIS
         Analyze DSC Configuration for the imported resources.
 
-    .PARAMETER DscConfigurationPath
+    .PARAMETER Path
         Path to DSC Configuration.
 #>
 function Get-RequiredDscResourceList
@@ -638,11 +643,11 @@ function Get-RequiredDscResourceList
         [ValidatePattern(".*.ps1$")]
         [ValidateScript({Test-Path $_})]
         [string]
-        $DscConfigurationPath
+        $Path
     )
     
     #Parse powershell script to AST
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($DscConfigurationPath, [ref]$null, [ref]$null)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
 
     #Find every Import-DscResource cmdlet
     [array]$resourceStatements = $ast.FindAll({($args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]) -and ($args[0].CommandElements.Value -contains 'Import-DscResource')}, $true) 
@@ -653,7 +658,7 @@ function Get-RequiredDscResourceList
     #We disallow use of the Name parameter here, because it's not supported or suggested
     if ("Name" -in $resourceStatements.CommandElements.ParameterName)
     {
-        throw "$DscConfigurationPath - Use of the 'Name' parameter when calling Import-DscResource is not supported."
+        throw "$Path - Use of the 'Name' parameter when calling Import-DscResource is not supported."
     }
 
     $resourceList = @()
@@ -662,7 +667,7 @@ function Get-RequiredDscResourceList
     { 
         if ($resource.CommandElements.Count -lt 5)
         {
-            throw "$DscConfigurationPath - Missing ModuleVersion parameter in config."
+            throw "$Path - Missing ModuleVersion parameter in config."
         }
         $resourceList += @{
             ModuleName = $resource.CommandElements[2].Value
@@ -677,7 +682,7 @@ function Get-RequiredDscResourceList
     .SYNOPSIS
         Analysis DSC Configuration for the configuration names.
 
-    .PARAMETER DscConfigurationPath
+    .PARAMETER Path
         Path to DSC Configuration.
 #>
 function Get-DscConfigurationName
@@ -688,15 +693,15 @@ function Get-DscConfigurationName
         [ValidateNotNullOrEmpty()]
         [ValidatePattern(".*.ps1$")]
         [string]
-        $DscConfigurationPath
+        $Path
     )
 
-    if($(Test-Path -Path $DscConfigurationPath) -eq $false)
+    if($(Test-Path -Path $Path) -eq $false)
     {
-        Throw "Failed to access $DscConfigurationPath"
+        Throw "Failed to access $Path"
     }
 
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($DscConfigurationPath, [ref]$null, [ref]$Null)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$Null)
 
     # find all AST of type ConfigurationDefinitionAST, this will allow us to find the name of each config
     $configurationDefinitionAsts = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ConfigurationDefinitionAst]}, $true)
@@ -719,12 +724,12 @@ function Register-DscPartialCatalog
     $partialCatalog = @()
     foreach ($partial in $partials)
     {
-        $partialConfigurationName = Get-DscConfigurationName -DscConfigurationPath $partial.FullName
+        $partialConfigurationName = Get-DscConfigurationName -Path $partial.FullName
 
         #array wrapper to force array type even for single object returns to maintain data consistency
-        $partialParams = @(Get-PSScriptParameterMetadata -DscConfigurationPath $partial.FullName)
+        $partialParams = @(Get-PSScriptParameterMetadata -Path $partial.FullName)
 
-        $partialResources = Get-RequiredDscResourceList -DscConfigurationPath $partial.FullName
+        $partialResources = Get-RequiredDscResourceList -Path $partial.FullName
 
         $partialValues = @{
             Name = $partialConfigurationName
@@ -793,7 +798,7 @@ function Save-TargetResourceList
         }
         catch
         {
-            Write-Warning "Could not find module $resource."
+            Write-Warning "$($resource.ModuleName) could not be found."
             Continue
         }
 
@@ -1689,10 +1694,10 @@ function Select-DscResource
     $modulePath = "$env:ProgramFiles\WindowsPowerShell\Modules"
 
     #Retrive unique list of required DSC Resources
-    $targetResources = ($targetPartials.Resources.Where({!([string]::IsNullOrEmpty($_.ModuleName))}).Split(",")) | Select-Object -Unique
+    $targetResources = $partialCatalog.Resources.Where({!([string]::IsNullOrEmpty($_))}) | Select-Object -Property ModuleName,ModuleVersion -Unique
 
     #Create an array of all DSC resources required
-    $resourcesToCopy += $targetResources.foreach({
+    $resourcesToCopy += $targetResources.ModuleName.foreach({
         return @{
             Path="$DscResourcesPath\$_"
             Destination="$modulePath\$_"
