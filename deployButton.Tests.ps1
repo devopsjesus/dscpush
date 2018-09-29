@@ -13,7 +13,8 @@
         The IP addresses of the VMs you built.  Hopefully with code...
 
     .EXAMPLE
-        .\deployButton.Tests.ps1 -Credential $(Get-Credential administrator) -VmNetworkAddressList @("192.0.0.25","192.0.0.26")
+        $credential = get-credential administrator
+        .\deployButton.Tests.ps1 -Credential $credential -VmNetworkAddressList @("192.0.0.30")
 #>
 param(
     [Parameter(Mandatory)]
