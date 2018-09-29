@@ -37,7 +37,7 @@
     .PARAMETER PartialCatalogPath
         Path to generate and reference the Partial Catalog.
         
-    .PARAMETER PartialStorePath
+    .PARAMETER PartialDirectoryPath
         Path to the directory containing the Partial Configurations to be published.
 
     .PARAMETER NodeTemplatePath
@@ -55,7 +55,7 @@
             GenerateSecrets        = $true
             ContentStoreRootPath   = $workspacePath
             PartialCatalogPath     = $partialCatalogPath
-            PartialStorePath       = $partialStorePath
+            PartialDirectoryPath   = $PartialDirectoryPath
             PartialSecretsPath     = $partialSecretsPath
             StoredSecretsPath      = $storedSecretsPath
             SecretsKeyPath         = $secretsKeyPath
@@ -108,7 +108,7 @@ function Initialize-DscPush
     
         [Parameter()]
         [string]
-        $PartialStorePath,
+        $PartialDirectoryPath,
 
         [Parameter()]
         [string]
@@ -127,7 +127,7 @@ function Initialize-DscPush
     {
         Write-Verbose "Generating Partial Catalog"
         $NewPartialCatalogParams = @{
-            PartialStorePath = $PartialStorePath
+            PartialDirectoryPath = $PartialDirectoryPath
             PartialCatalogPath = $PartialCatalogPath
         }
         New-PartialCatalog @NewPartialCatalogParams
@@ -174,7 +174,7 @@ function Initialize-DscPush
             PartialCatalogPath = $PartialCatalogPath
             DscResourcesPath   = $DscResourcesPath
         }
-        Save-TargetResourceList @saveDscResourcesParams
+        Save-DscResourceList @saveDscResourcesParams
     }
 }
 
@@ -395,7 +395,7 @@ function Publish-TargetConfig
     $ProgressPreference = "SilentlyContinue"
 
     Write-Verbose "Import the partial catalog"
-    $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
+    $partialCatalog = [DscPartial[]](ConvertFrom-Json ([string](Get-Content $PartialCatalogPath)))
 
     Write-Verbose "Import the Node Definition file"
     $targetConfigs = . $NodeDefinitionFilePath
@@ -554,31 +554,25 @@ function Publish-TargetConfig
         Retrieves the AST of a DSC script and returns pertinent parameter metadata.
 
     .DESCRIPTION
-        This function will parse a PS script's parameter block into AST and return all metadata.  This will include
-        mandatory flags, other validations, and the parameter type.
+        This function will parse a PS script's parameter block into AST and return all metadata.
+        Includes mandatory flags, other validations, and the parameter type.
 
-    .PARAMETER DscConfigurationPath
-        Path to the PowerShell script.
+    .PARAMETER Path
+        Path to PowerShell script.
 
     .EXAMPLE
-        Get-PSScriptPatameterMetadata -DscConfigurationPath
+        Get-PSScriptPatameterMetadata -Path $Path
 #>
 function Get-PSScriptParameterMetadata
 {
     Param
     (
         [Parameter(mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [ValidateScript({Test-Path $_})]
         [ValidatePattern(".*.ps1$")]
+        [ValidateScript({Test-Path $_})]
         [string]
         $Path
     )
-
-    if($(Test-Path -Path $Path) -eq $false)
-    {
-        Throw "Failed to access $Path"
-    }
 
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
 
@@ -629,17 +623,22 @@ function Get-PSScriptParameterMetadata
 
 <#
     .SYNOPSIS
-        Analyze DSC Configuration for the imported resources.
+        Analyze PowerShell script for any imported DSC resources (i.e. Import-DscResource cmdlet invoked).
+
+    .DESCRIPTION
+        This function will parse a PS script AST and return all resource names and versions of imported dsc resources.
 
     .PARAMETER Path
-        Path to DSC Configuration.
+        Path to PowerShell script.
+
+    .EXAMPLE
+        Get-RequiredDscResourcesList -Path $Path
 #>
 function Get-RequiredDscResourceList
 {
     Param
     (
-        [Parameter(mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
+        [Parameter(mandatory)]
         [ValidatePattern(".*.ps1$")]
         [ValidateScript({Test-Path $_})]
         [string]
@@ -680,102 +679,66 @@ function Get-RequiredDscResourceList
 
 <#
     .SYNOPSIS
-        Analysis DSC Configuration for the configuration names.
+        Analyze PowerShell script for any configuration statements.
+    
+    .DESCRIPTION
+        This function will parse a PS script AST and return all configuration statement names.
 
     .PARAMETER Path
-        Path to DSC Configuration.
+        Path to Powershell script.
+
+    .EXAMPLE
+        Get-DscConfigurationName -Path $Path
 #>
 function Get-DscConfigurationName
 {
     Param
     (
         [Parameter(mandatory = $true)]
-        [ValidateNotNullOrEmpty()]
         [ValidatePattern(".*.ps1$")]
+        [ValidateScript({Test-Path $_})]
         [string]
         $Path
     )
 
-    if($(Test-Path -Path $Path) -eq $false)
-    {
-        Throw "Failed to access $Path"
-    }
-
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$Null)
 
-    # find all AST of type ConfigurationDefinitionAST, this will allow us to find the name of each config
-    $configurationDefinitionAsts = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ConfigurationDefinitionAst]}, $true)
+    #Find all AST of type ConfigurationDefinitionAST, this will allow us to find the name of each config
+    $configurationAst = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ConfigurationDefinitionAst]}, $true)
 
-    # isntance name is the name of the config
-    $configurationDefinitionAsts.InstanceName.Value
-}
-
-function Register-DscPartialCatalog
-{
-    param
-    (
-        [Parameter(Mandatory)]
-        [string]
-        $PartialStore
-    )
-
-    $partials = Get-ChildItem $PartialStore
-    
-    $partialCatalog = @()
-    foreach ($partial in $partials)
+    #If we find more than one configuration statement, throw, because that is not supported
+    if ($configurationAst.count -ne 1)
     {
-        $partialConfigurationName = Get-DscConfigurationName -Path $partial.FullName
-
-        #array wrapper to force array type even for single object returns to maintain data consistency
-        $partialParams = @(Get-PSScriptParameterMetadata -Path $partial.FullName)
-
-        $partialResources = Get-RequiredDscResourceList -Path $partial.FullName
-
-        $partialValues = @{
-            Name = $partialConfigurationName
-            Path = $partial.FullName
-            Resources = $partialResources
-            Parameters = $partialParams
-        }
-        $partialObj = New-DscPartial @partialValues
-
-        $partialCatalog += $partialObj
+        throw "$Path - Only one configuration statements is supported in each script"
     }
 
-    return $partialCatalog
-}
-
-function Import-PartialCatalog
-{
-    param
-    (
-        [Parameter()]
-        [string]
-        $PartialCatalogPath
-    )
-    
-    $partialCatalogObject = ConvertFrom-Json ([string](Get-Content $PartialCatalogPath))
-
-    [DscPartial[]]$partialCatalog = $partialCatalogObject
-
-    return $partialCatalog
+    return $configurationAst.InstanceName.Value
 }
 
 <#
     .SYNOPSIS
         Saves (overwrites) all the resources required for the partials in the specified directory.
 
+    .DESCRIPTION
+        This function will import the partial catalog, and return a list of unique DSC resource names and version numbers.
+        With that list, the function will attempt to find the module by its name and version.  If found, it will remove the
+        existing resource with the same name from the resources directory and save the module from the public repository.
+
     .PARAMETER PartialCatalogPath
         Path to the Partial Catalog. The catalog is used to gather the list of required resources.
 
     .PARAMETER DscResourcesPath
-        Path to the location the DSC Resources should be saved.
+        Path to the directory containing required DSC Resources.
+
+    .EXAMPLE
+        Save-DscResourceList
 #>
-function Save-TargetResourceList
+function Save-DscResourceList
 {
     param
     (
         [Parameter()]
+        [ValidateScript({Test-Path $_})]
         [string]
         $PartialCatalogPath,
 
@@ -784,8 +747,13 @@ function Save-TargetResourceList
         $DscResourcesPath
     )
 
+    if (! (Test-Path $DscResourcesPath))
+    {
+        New-Item -Path $DscResourcesPath -ItemType Directory -Force -ErrorAction Stop
+    }
+
     Write-Verbose "Import the partial catalog"
-    $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath -ErrorAction Stop
+    $partialCatalog = [DscPartial[]](ConvertFrom-Json ([string](Get-Content $PartialCatalogPath)))
 
     $targetResources = $partialCatalog.Resources.Where({!([string]::IsNullOrEmpty($_))}) | Select-Object -Property ModuleName,ModuleVersion -Unique
 
@@ -890,7 +858,6 @@ Function ConvertFrom-Hashtable
 
     return $hashstr
 }
-#endregion
 
 function Export-NodeDefinitionFile
 {
@@ -1622,51 +1589,6 @@ function Write-Config
     }
 }
 
-<# Er...don't use this for now - was attempting on host partial compilation. doesn't seem to work that well #>
-function Copy-DscPartial
-{
-    param
-    (
-        [parameter(Mandatory)]
-        $TargetConfig,
-
-        [Parameter()]
-        [string]
-        $ContentStoreDscPartialStorePath,
-
-        [Parameter()]
-        [pscredential]
-        $DeploymentCredential,
-
-        [Parameter()]
-        [DscPartial[]]
-        $PartialCatalog
-    )
-    
-    #Import PartialCatalog
-    #$targetPartials = $PartialCatalog.where({$_.Name -in $TargetConfig.RoleList})
-
-    #Point to C:\Program Files\WindowsPowerShell\Modules
-    $partialStorePath = Join-Path -Path $TargetConfig.variables.LocalSourceStore -ChildPath "DscPartials"
-
-    
-    #$session = New-PSSession -ComputerName $TargetConfig.TargetIP -Credential $DeploymentCredential
-    #foreach ($partial in $targetPartials)
-    #{
-        $copyPartialParams = @{
-            Path=$ContentStoreDscPartialStorePath
-            Destination=$partialStorePath
-            Target=$TargetConfig.TargetIP
-            Credential=$DeploymentCredential
-        }
-
-        Copy-RemoteContent @copyPartialParams
-        
-        #$null = Copy-Item -Path "$DscResourcesPath\$resource" -Destination $env:PSModulePath.split(";")[1] -ToSession $session -Recurse -Force -ErrorAction Stop
-    #}
-    #$null = Remove-PSSession -Session $session
-}
-
 function Select-DscResource
 {
     param
@@ -1760,19 +1682,27 @@ function Initialize-TargetLcm
             {
                 Settings
                 {
-                    CertificateId = $MofEncryptionCertThumbprint
-                    RebootNodeIfNeeded = $TargetLcmSettings.RebootNodeIfNeeded
+                    CertificateId                  = $MofEncryptionCertThumbprint
+                    RebootNodeIfNeeded             = $TargetLcmSettings.RebootNodeIfNeeded
                     ConfigurationModeFrequencyMins = $TargetLcmSettings.ConfigurationModeFrequencyMins
-                    ConfigurationMode = $TargetLcmSettings.ConfigurationMode
+                    ConfigurationMode              = $TargetLcmSettings.ConfigurationMode
+                    AllowModuleOverWrite           = $TargetLcmSettings.AllowModuleOverwrite
+                    ActionAfterReboot              = $TargetLcmSettings.ActionAfterReboot
+                    RefreshMode                    = $TargetLcmSettings.RefreshMode
+                    DebugMode                      = $TargetLcmSettings.DebugMode
                 }
             }
             else
             {
                 Settings
                 {
-                    RebootNodeIfNeeded = $TargetLcmSettings.RebootNodeIfNeeded
+                    RebootNodeIfNeeded             = $TargetLcmSettings.RebootNodeIfNeeded
                     ConfigurationModeFrequencyMins = $TargetLcmSettings.ConfigurationModeFrequencyMins
-                    ConfigurationMode = $TargetLcmSettings.ConfigurationMode
+                    ConfigurationMode              = $TargetLcmSettings.ConfigurationMode
+                    AllowModuleOverWrite           = $TargetLcmSettings.AllowModuleOverwrite
+                    ActionAfterReboot              = $TargetLcmSettings.ActionAfterReboot
+                    RefreshMode                    = $TargetLcmSettings.RefreshMode
+                    DebugMode                      = $TargetLcmSettings.DebugMode
                 }
             }
 
@@ -1800,6 +1730,68 @@ function Initialize-TargetLcm
     }
 
     $null = Set-DscLocalConfigurationManager -CimSession $targetCimSession -Path $compiledMofRootPath -ErrorAction Stop
+}
+
+<#
+    .SYNOPSIS
+        Resets the LCM on a specified target back to default values.
+
+    .DESCRIPTION
+        This function will create a CIM session to the remote target(s), output a generic LCM config with default values, and
+        remove any DSC config documents.
+
+    .PARAMETER TargetName
+        Name or IP address of the target.
+
+    .PARAMETER Credential
+        Credential used to establish the CIM Session.
+
+    .PARAMETER OutputPath
+        Path to the directory to output the generic LCM config.
+
+    .EXAMPLE
+        Reset-TargetLcm -TargetName "192.0.0.30" -Credential (Get-Credential administrator)
+#>
+function Reset-TargetLcm
+{
+    param
+    (
+        [parameter(Mandatory)]
+        [string[]]
+        $TargetName,
+
+        [parameter(Mandatory)]
+        [pscredential]
+        $Credential,
+
+        [parameter()]
+        [string]
+        $OutputPath = "C:\Windows\Temp\$TargetName"
+    )
+
+    $cimSession = New-CimSession -ComputerName $TargetName -Credential $Credential -ErrorAction Stop
+
+    [DSCLocalConfigurationManager()]
+    Configuration NullConfig
+    {
+        Node $TargetName
+        {
+    
+            Settings   
+            {                              
+                RebootNodeIfNeeded = $True
+                ConfigurationModeFrequencyMins = 15
+                ConfigurationMode = 'ApplyAndAutoCorrect'
+            } 
+        }
+    }
+    $null = NullConfig -OutputPath $OutputPath
+    
+    $null = Set-DscLocalConfigurationManager -CimSession $cimSession -Path $outputPath -Force
+
+    $null = Remove-DscConfigurationDocument -Stage Current -CimSession $cimSession -Force
+    $null = Remove-DscConfigurationDocument -Stage Pending -CimSession $cimSession -Force
+    $null = Remove-DscConfigurationDocument -Stage Previous -CimSession $cimSession -Force
 }
 
 function Send-Config
@@ -1840,9 +1832,10 @@ function Send-Config
     {
         $compiledPartialMofPath = Join-Path -Path $compiledMofRootPath -ChildPath $partial
 
-        while (($null = Get-DscLocalConfigurationManager -CimSession $targetCimSession).LCMState -eq "Busy")
+        while ($lcmState -eq "Busy" -or $lcmState -like "*reboot")
         {
             Start-Sleep 1
+            $lcmState = (Get-DscLocalConfigurationManager -CimSession $targetCimSession).LCMState
         }
 
         #$null = Invoke-Command -ScriptBlock { Publish-DscConfiguration -Path $using:MofOutputPath -ErrorAction Stop } -Session $targetPSSession
@@ -1887,14 +1880,36 @@ function New-PartialCatalog
     (
         [Parameter()]
         [string]
-        $PartialStorePath,
+        $PartialDirectoryPath,
 
         [Parameter()]
         [string]
         $PartialCatalogPath
     )
 
-    $partialCatalog = Register-DscPartialCatalog -PartialStore $PartialStorePath
+    $partials = Get-ChildItem $PartialDirectoryPath
+    
+    $partialCatalog = @()
+    foreach ($partial in $partials)
+    {
+        $partialConfigurationName = Get-DscConfigurationName -Path $partial.FullName
+
+        #array wrapper to force array type even for single object returns to maintain data consistency
+        $partialParams = @(Get-PSScriptParameterMetadata -Path $partial.FullName)
+
+        $partialResources = Get-RequiredDscResourceList -Path $partial.FullName
+
+        $partialValues = @{
+            Name = $partialConfigurationName
+            Path = $partial.FullName
+            Resources = $partialResources
+            Parameters = $partialParams
+        }
+        $partialObj = New-DscPartial @partialValues
+
+        $partialCatalog += $partialObj
+    }
+
     $json = ConvertTo-Json -InputObject $partialCatalog -Depth 7
     Out-File -FilePath $PartialCatalogPath -InputObject $json
 }
@@ -1921,7 +1936,7 @@ function New-SecretsFile
     )
 
     #import the partial catalog
-    $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath
+    $partialCatalog = [DscPartial[]](ConvertFrom-Json ([string](Get-Content $PartialCatalogPath)))
 
     #Find parameter types of pscredential
     #$partialSecrets = $partialCatalog.Parameters.Where({$_.Attributes.Name -eq "System.Management.Automation.PSCredential"})
@@ -2000,7 +2015,7 @@ function New-NodeDefinitionFile
     }
 
     #import the partial catalog
-    $partialCatalog = Import-PartialCatalog -PartialCatalogPath $PartialCatalogPath
+    $partialCatalog = [DscPartial[]](ConvertFrom-Json ([string](Get-Content $PartialCatalogPath)))
 
     #import the template definition file
     $nodeDefinition = Invoke-Command -ScriptBlock $ExecutionContext.InvokeCommand.NewScriptBlock($NodeTemplatePath)

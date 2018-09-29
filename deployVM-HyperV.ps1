@@ -3,7 +3,7 @@
 param(
     $VhdPath = "C:\Virtualharddisks\win2016core.vhdx",
 
-    $VSwitchName = "RPS-vSwitch1",
+    $VSwitchName = "DSC-vSwitch1",
     
     $HostIpAddress = "192.0.0.247",
     
@@ -187,23 +187,24 @@ workflow ConfigureVM
 		    {
                 if ($Clobber)
                 {
-                    Stop-VM $vmName -TurnOff -Force -ErrorAction Ignore
+                    Stop-VM $vmName -TurnOff -Force -ErrorAction Ignore -WarningAction Ignore
 	    		    Remove-VM $vmName -Force -ErrorAction Ignore
 			        Remove-Item "$vhdParentPath\$vmName.vhdx" -ErrorAction Ignore
 
-                    #create new differencing disks based on the template disk
 		            if ($DifferencingDisks)
                     {
+                        Write-Output "Creating differencing disk at $vhdParentPath\$vmName.vhdk"
                         $newVHD = New-VHD -Path "$vhdParentPath\$vmName.vhdx" -ParentPath "$VHDPath" -Differencing
                     }
                     else #do a full copy
                     {
+                        Write-Output "Copying sysprepped VHDX to $vhdParentPath\$vmName.vhdk"
                         Copy-Item -Path "$VHDPath" -Destination "$vhdParentPath\$vmName.vhdx" -Force
                     }
                 }
                 else
                 {
-                    Write-Output "VHD for VM $vmName already exists, and Clobber was not specified.  Skipping VM VHD creation."
+                    Write-Output "VHD for VM $vmName already exists, and Clobber was not specified. Skipping VM VHD creation."
                 }
 		    }
             else
@@ -211,10 +212,12 @@ workflow ConfigureVM
                 #create new differencing disks based on the template disk
 		        if ($DifferencingDisks)
                 {
+                    Write-Output "Creating differencing disk at $vhdParentPath\$vmName.vhdk"
                     $newVHD = New-VHD -Path "$vhdParentPath\$vmName.vhdx" -ParentPath "$VHDPath" -Differencing
                 }
                 else #do a full copy
                 {
+                    Write-Output "Copying sysprepped VHDX to $vhdParentPath\$vmName.vhdk"
                     Copy-Item -Path "$VHDPath" -Destination "$vhdParentPath\$vmName.vhdx" -Force
                 }
             }
