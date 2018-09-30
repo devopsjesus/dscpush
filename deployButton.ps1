@@ -3,11 +3,11 @@ param
 (
     [parameter()]
     [string]
-    $WorkspacePath = "C:\dscpush-master",
+    $WorkspacePath = "C:\library\deploy",
     
     [parameter()]
     [switch]
-    $DeployInfrastructure = $true,
+    $DeployInfrastructure = $false,
     
     [parameter()]
     [string]
@@ -27,7 +27,7 @@ param
 
     [parameter()]
     [string]
-    $NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
+    $NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\coreappstest.ps1"
 )
 
 #region vars
@@ -82,8 +82,8 @@ Import-Module -FullyQualifiedName $dSCPushModulePath -ErrorAction Stop
 #>
 $initDeploymentSettings = @{
     GeneratePartialCatalog = $true
-    GenerateSecrets        = $true
-    SeedDscResources       = $true
+    GenerateSecrets        = $false
+    SeedDscResources       = $false
     DscResourcesPath       = $DscResourcesPath
     PartialCatalogPath     = $partialCatalogPath
     PartialDirectoryPath   = $PartialDirectoryPath
@@ -124,8 +124,8 @@ if ($DeployInfrastructure)
   This sample shows Mof Encryption via the $mofEncryptionSettings var.#>
 $publishTargetSettings = @{
     CompilePartials             = $true
-    SanitizeModulePaths         = $true
-    CopyContentStore            = $true
+    SanitizeModulePaths         = $false
+    CopyContentStore            = $false
     ForceResourceCopy           = $true
     DeploymentCredential        = $DeploymentCredential
     ContentStoreRootPath        = $contentStoreRootPath
