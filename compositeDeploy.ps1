@@ -30,7 +30,7 @@
 
     [parameter()]
     [string]
-    $NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
+    $NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\CompositeDeploy.ps1"
 )
 
 #region vars
