@@ -104,7 +104,7 @@ InModuleScope $ModuleName {
 
         Context "Bad Inputs" {
             
-            It "Path parameter not ending in '.ps1' will cause an error" {
+            It "Path parameter not ending in '.ps1' or '.psm1' will cause an error" {
 
                 "foo" > "$TestDrive\pathexists.exe"
                 try
@@ -115,7 +115,7 @@ InModuleScope $ModuleName {
                 {
                    $error = $_ 
                 }
-                $error | Should -BeLike '*does not match the ".*.ps1$" pattern*'
+                $error | Should -BeLike '*does not match the ".*.ps1$|.*.psm1$" pattern*'
             }
 
             It "Path cannot be found will cause an error" {

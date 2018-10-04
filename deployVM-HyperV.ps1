@@ -51,7 +51,7 @@ $vmList = $nodeDefinition.Configs.ForEach({
         TargetItemName = $_.Variables.ComputerName
         TargetIP       = $_.TargetAdapter.NetworkAddress.IPAddressToString
         MacAddress     = $_.TargetAdapter.PhysicalAddress
-        VmMemory       = 1024MB
+        VmMemory       = 2048MB
     }
 })
 #endregion
