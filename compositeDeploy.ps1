@@ -6,11 +6,11 @@
     
     [parameter()]
     [switch]
-    $DeployInfrastructure = $true,
+    $DeployInfrastructure = $false,
     
     [parameter()]
     [string]
-    $VhdPath = "C:\VirtualHardDisks\win2016.vhdx",
+    $VhdxPath = "C:\VirtualHardDisks\win2016core-20180924.vhdx",
     
     [parameter()]
     [switch]
@@ -89,6 +89,7 @@ if ($injectConfig)
         DscResourcesPath           = $DscResourcesPath
         CompositeResourcePath      = $CompositeResourcePath
         ContentStorePath           = $contentStoreRootPath
+        SeedDscResources           = $false
     }
     Add-ConfigurationToVHDx @configInjectionParams
     
@@ -132,6 +133,7 @@ else
         SanitizeModulePaths         = $true
         CopyContentStore            = $true
         CopyDscResources            = $true
+        SeedDscResources            = $true
         DeploymentCredential        = $DeploymentCredential
         CompositeResourcePath       = $CompositeResourcePath
         ConfigurationDirectoryPath  = $ConfigurationDirectoryPath

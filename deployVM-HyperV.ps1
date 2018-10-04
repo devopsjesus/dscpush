@@ -109,6 +109,10 @@ function Set-VmGuestIpAddress
 
 #region TrustedHosts
 #Add the IP list of the target VMs to the trusted host list
+if ((Get-Service "WinRM" -ErrorAction Stop).status -eq 'Stopped') 
+{
+    Start-Service "WinRM" -Confirm:$false -ErrorAction Stop
+}
 $currentTrustedHost = (Get-Item WSMan:\localhost\Client\TrustedHosts).Value
 
 if(($currentTrustedHost -ne '*') -and ([string]::IsNullOrEmpty($currentTrustedHost) -eq $false))

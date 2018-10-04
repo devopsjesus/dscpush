@@ -382,7 +382,11 @@ function Publish-CompositeTargetConfig
 
         [Parameter()]
         [switch]
-        $CopyDscResources
+        $CopyDscResources,
+
+        [Parameter()]
+        [switch]
+        $SeedDscResources
     )
     #Hide Progress Bars
     $progressPrefSetting = $ProgressPreference
@@ -398,6 +402,7 @@ function Publish-CompositeTargetConfig
         DscResourcesPath       = $DscResourcesPath
         TargetIPList           = $targetConfigs.Configs.TargetAdapter.NetworkAddress.IPAddressToString
         SanitizeModulePaths    = $SanitizeModulePaths.IsPresent
+        SeedDscResources       = $SeedDscResources
     }
     $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
@@ -624,13 +629,28 @@ function Add-ConfigurationToVHDx
         $CompositeResourcePath,        
 
         [parameter(Mandatory)]
-        [ValidateScript({Test-Path $_})]
         [string]
-        $ContentStorePath
+        $ContentStorePath,
+
+        [Parameter()]
+        [switch]
+        $SeedDscResources
     )
 
     Write-Verbose "Import the Node Definition file"
     $targetConfigs = . $NodeDefinitionFilePath
+
+    if ($SeedDscResources)
+    {
+        Write-Verbose "Saving required DSC Resources to the specified DSC Resources path"
+        $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
+        $resourceList += $composite.Resources
+        $saveDscResourcesParams = @{
+            ResourceList    = $resourceList
+            DestinationPath = $DscResourcesPath
+        }
+        Save-CompositeDscResourceList @saveDscResourcesParams
+    }
 
     $moduleDestPath = $env:PSModulePath.Split(";")[1]
 
@@ -774,26 +794,32 @@ function Add-ContentStoreToVHDx
         $VhdxDriveLetter,
 
         [parameter(Mandatory)]
-        [ValidateScript({Test-Path $_})]
         [string]
         $ContentStorePath
     )
 
-    $contentStoreDestinationPath = "${vhdxDriveLetter}:\ContentStore"
-
-    if (! (Test-Path $contentStoreDestinationPath))
+    if (! (Test-Path $ContentStorePath))
     {
-        try
-        {
-            $null = New-Item -Path $contentStoreDestinationPath -ItemType Directory -ErrorAction Stop
-        }
-        catch
-        {
-            throw "Could not create content store directory on mounted drive."
-        }
+        Write-Verbose "ContentStore path not found at $ContentStorePath, skipping content store copy."
     }
+    else
+        {
+        $contentStoreDestinationPath = "${vhdxDriveLetter}:\ContentStore"
 
-    $null = & xcopy.exe "$contentStorePath" "$contentStoreDestinationPath\*" /R /Y /E
+        if (! (Test-Path $contentStoreDestinationPath))
+        {
+            try
+            {
+                $null = New-Item -Path $contentStoreDestinationPath -ItemType Directory -ErrorAction Stop
+            }
+            catch
+            {
+                throw "Could not create content store directory on mounted drive."
+            }
+        }
+
+        $null = & xcopy.exe "$contentStorePath" "$contentStoreDestinationPath\*" /R /Y /E
+    }
 }
 
 function Assert-DriveMounted
@@ -826,8 +852,8 @@ function Assert-DriveMounted
     {
         $diskInfo = Get-Disk -Number $vhdInfo.DiskNumber -ErrorAction Stop
         $volumeInfo = Get-Partition -DiskNumber $vhdInfo.DiskNumber | Get-Volume
-        $driveLetter = $volumeInfo.DriveLetter
-        if (! ($driveLetter -is [char]))
+        $driveLetter = $volumeInfo.DriveLetter.Where({! ([string]::IsNullOrEmpty($_))})
+        if ($driveLetter.count -gt 1)
         {
             throw "Disk drive letter misconfiguration - either too many partitions have drive letters, or there are none."
         }
@@ -1375,6 +1401,80 @@ function Get-DscConfigurationName
     }
 
     return $configurationAst.InstanceName.Value
+}
+
+<#
+    .SYNOPSIS
+        Saves (overwrites) all the resources required for the partials in the specified directory.
+
+    .DESCRIPTION
+        This function will import the partial catalog, and return a list of unique DSC resource names and version numbers.
+        With that list, the function will attempt to find the module by its name and version.  If found, it will remove the
+        existing resource with the same name from the resources directory and save the module from the public repository.
+
+    .PARAMETER PartialCatalogPath
+        Path to the Partial Catalog. The catalog is used to gather the list of required resources.
+
+    .PARAMETER DscResourcesPath
+        Path to the directory containing required DSC Resources.
+
+    .EXAMPLE
+        Save-CompositeDscResourceList
+#>
+function Save-CompositeDscResourceList
+{
+    param
+    (
+        [Parameter()]
+        [hashtable[]]
+        $ResourceList,
+
+        [Parameter()]
+        [string]
+        $DestinationPath
+    )
+
+    if (! (Test-Path $DestinationPath))
+    {
+        New-Item -Path $DestinationPath -ItemType Directory -Force -ErrorAction Stop
+    }
+
+    foreach ($resource in $ResourceList)
+    {
+        #Find the module first, in order to skip custom resources
+        try
+        {
+            $null = Find-Module -Name $resource.ModuleName -RequiredVersion $resource.ModuleVersion -ErrorAction Stop
+        }
+        catch
+        {
+            Write-Warning "$($resource.ModuleName) could not be found."
+            Continue
+        }
+
+        $resourceDestPath = Join-Path -Path $DscResourcesPath -ChildPath $resource.ModuleName
+        if (Test-Path $resourceDestPath)
+        {
+            Remove-Item -Path $resourceDestPath -Recurse -Force -ErrorAction Stop
+        }
+        
+        try
+        {
+            $currentProgressPreference = $ProgressPreference
+            $ProgressPreference = 'SilentlyContinue'
+
+             Write-Verbose "Saving DSC Resource: $resource to $DscResourcesPath"
+             Save-Module -Name $resource.ModuleName -RequiredVersion $resource.ModuleVersion -Path $DscResourcesPath -Force -ErrorAction Stop
+        }
+        catch
+        {
+            throw "Could not save DSC Resource: $resource to $DscResourcesPath"
+        }
+        finally
+        {
+            $ProgressPreference = $currentProgressPreference
+        }
+    }
 }
 
 <#
@@ -2048,7 +2148,11 @@ function Initialize-DeploymentEnvironment
 
         [Parameter()]
         [switch]
-        $SanitizeModulePaths
+        $SanitizeModulePaths,
+
+        [Parameter()]
+        [switch]
+        $SeedDscResources
     )
 
     if ($SanitizeModulePaths.IsPresent)
@@ -2073,6 +2177,18 @@ function Initialize-DeploymentEnvironment
         }
 
         Write-Verbose "Sanitizing module directories complete."
+    }
+
+    if ($SeedDscResources)
+    {
+        Write-Verbose "Saving required DSC Resources to the specified DSC Resources path"
+        $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
+        $resourceList += $composite.Resources.ModuleName
+        $saveDscResourcesParams = @{
+            ResourceList    = $resourceList
+            DestinationPath = $DscResourcesPath
+        }
+        Save-CompositeDscResourceList @saveDscResourcesParams
     }
     
     #Required modules will be copied to the C:\Program Files\WindowsPowerShell\Modules  #logged in user's documents folder
