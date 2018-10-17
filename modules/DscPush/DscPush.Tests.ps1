@@ -1,3 +1,4 @@
+install-module pester -force
 $ModuleRoot = $PSScriptRoot
 $ModulePath = $MyInvocation.MyCommand.Path -replace '\.Tests\.ps1$','.psm1'
 $ModuleName = Split-Path -Path $ModuleRoot -Leaf
@@ -123,7 +124,7 @@ InModuleScope $ModuleName {
             $configPath = "$TestDrive\testConfig.ps1"
             $configText = 'Configuration OSCore 
             { 
-                Import-DscResource –ModuleName "PSDesiredStateConfiguration" -ModuleVersion 1.1
+                Import-DscResource -ModuleName "PSDesiredStateConfiguration" -ModuleVersion 1.1
                 Import-DscResource -ModuleName "xNetworking" -ModuleVersion 5.7.0.0
                 Import-DscResource -ModuleName "xComputerManagement" -ModuleVersion 4.1.0.0
             }' >> $configPath
