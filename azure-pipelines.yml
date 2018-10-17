@@ -7,7 +7,7 @@ pool:
   vmImage: 'vs2017-win2016'
 
 steps:
-- powershell: . $(Join-Path $Env:BUILD_SOURCESDIRECTORY -ChildPath "modules\DscPush\DscPush.Test.ps1")
+- powershell: ls . ; ./modules/DscPush/DscPush.Test.ps1
   displayName: 'Run the module tests.'
 
 - script: |
