@@ -7,7 +7,7 @@ pool:
   vmImage: 'vs2017-win2016'
 
 steps:
-- powershell: D:\a\1\s\modules\DscPush\DscPush.Test.ps1
+- powershell: $Env:BUILD_SOURCESDIRECTORY\modules\DscPush\DscPush.Test.ps1
   displayName: 'Run the module tests.'
 
 - script: |
