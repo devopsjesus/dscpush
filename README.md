@@ -74,3 +74,5 @@ DscPush is a DSC Configuration management framework. It consists of a module (Ds
 | **Dependency** | Partial Dependencies (LCM Property) |
 | **Secret** | Any protected property of a Config (e.g. Credential, Cert Password) |
 | **Content Store** | The publishing directory that supports the Configs being published. |
+
+[![Build Status](https://dev.azure.com/devopsjesus/DscPush/_apis/build/status/devopsjesus.dscpush)](https://dev.azure.com/devopsjesus/DscPush/_build/latest?definitionId=1)
