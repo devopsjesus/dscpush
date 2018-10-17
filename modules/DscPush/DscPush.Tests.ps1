@@ -1,4 +1,4 @@
-install-module pester -force
+install-module pester -force -SkipPublisherCheck
 $ModuleRoot = $PSScriptRoot
 $ModulePath = $MyInvocation.MyCommand.Path -replace '\.Tests\.ps1$','.psm1'
 $ModuleName = Split-Path -Path $ModuleRoot -Leaf
