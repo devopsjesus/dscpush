@@ -7,8 +7,8 @@ pool:
   vmImage: 'vs2017-win2016'
 
 steps:
-- powershell: Write-Output "Hi, there."
-  displayName: 'Run the first PowerShell command.'
+- powershell: .\modules\DscPush\DscPush.Test.ps1
+  displayName: 'Run the module tests.'
 
 - script: |
     echo Add other tasks to build, test, and deploy your project.
