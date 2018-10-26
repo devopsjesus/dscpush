@@ -233,7 +233,7 @@ function Get-DscCompositeMetaData
 
         Write-Verbose "Parsing $resourcePath"
         $parameters = @(Get-PSScriptParameterMetadata -Path $resourcePath)
-        $requiredResourceList = Get-RequiredDscResourceList -Path $resourcePath
+        $requiredResourceList = @(Get-RequiredDscResourceList -Path $resourcePath)
         
         $compositeValues = @{
             Resource = $resource
@@ -334,6 +334,46 @@ Function ConvertFrom-Hashtable
     }
 
     return $hashstr
+}
+
+<#
+    .SYNOPSIS
+        Generates a list of required DSC Resources' local paths and destinations.
+
+    .DESCRIPTION
+        This function will 
+
+    .PARAMETER InputObject
+
+    .EXAMPLE
+        ConvertFrom-Hashtable -InputObject @{key="value"}
+#>
+function New-DscResourceList
+{
+    param
+    (
+        [Parameter()]
+        [string]
+        $DscResourcesPath,
+
+        [Parameter()]
+        [DscCompositeResource[]]
+        $CompositeResource,
+
+        [Parameter()]
+        [char]
+        $DestinationDriveLetter = "C"
+    )
+
+    #Create an array of all DSC resources required
+    $resourcesToCopy += $CompositeResource.Resources.ModuleName.foreach({
+        @{
+            Path="$DscResourcesPath\$_"
+            Destination="${DestinationDriveLetter}:\Program Files\WindowsPowerShell\Modules\$_"
+        }
+    })
+        
+    return $resourcesToCopy
 }
 #endregion tests completed
 <#
@@ -733,6 +773,8 @@ function Publish-CompositeTargetConfig
     Write-Verbose "Import the Node Definition file"
     $targetConfigs = . $NodeDefinitionFilePath
 
+    $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
+
     Write-Verbose "Setup Deployment Environment"
     $initializeParams = @{
         ContentStoreRootPath   = $ContentStoreRootPath
@@ -740,14 +782,23 @@ function Publish-CompositeTargetConfig
         DscResourcesPath       = $DscResourcesPath
         TargetIPList           = $targetConfigs.Configs.TargetAdapter.NetworkAddress.IPAddressToString
         SanitizeModulePaths    = $SanitizeModulePaths.IsPresent
-        SeedDscResources       = $SeedDscResources
     }
     $currentTrustedHost = Initialize-DeploymentEnvironment @initializeParams
 
+    if ($SeedDscResources)
+    {
+        Write-Verbose "Saving required DSC Resources to the specified DSC Resources path"
+        $saveDscResourcesParams = @{
+            ResourceList    = $composite.Resources
+            DestinationPath = $DscResourcesPath
+        }
+        Save-CompositeDscResourceList @saveDscResourcesParams
+    }
+
     $secretsImportParams = @{
-        StoredSecretsPath     = $StoredSecretsPath
-        SecretsKeyPath        = $SecretsKeyPath
-        CompositeResourcePath = $CompositeResourcePath
+        StoredSecretsPath = $StoredSecretsPath
+        SecretsKeyPath    = $SecretsKeyPath
+        CompositeResource = $composite
     }
     $storedSecrets = Register-Secrets @secretsImportParams
 
@@ -773,7 +824,7 @@ function Publish-CompositeTargetConfig
         Write-Output "  Compiling and writing Config to directory: $MofStorePath"
         $configParams = @{
             TargetConfig               = $config
-            CompositeResourcePath      = $CompositeResourcePath
+            CompositeResource          = $composite
             ConfigurationDirectoryPath = $ConfigurationDirectoryPath
             StoredSecrets              = $storedSecrets
             SecretsKeyPath             = $SecretsKeyPath
@@ -806,8 +857,8 @@ function Publish-CompositeTargetConfig
         {
             Write-Output "  Preparing required DSC Resources for remote copy"
             $copyResourceParams = @{
-                CompositeResourcePath = $CompositeResourcePath
-                DscResourcesPath      = $DscResourcesPath
+                CompositeResource = $composite
+                DscResourcesPath  = $DscResourcesPath
             }
             $fileCopyList += New-DscResourceList @copyResourceParams
         }
@@ -978,10 +1029,11 @@ function Add-ConfigurationToVHDx
     Write-Verbose "Import the Node Definition file"
     $targetConfigs = . $NodeDefinitionFilePath
 
+    $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
+
     if ($SeedDscResources)
     {
         Write-Verbose "Saving required DSC Resources to the specified DSC Resources path"
-        $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
         $resourceList += $composite.Resources
         $saveDscResourcesParams = @{
             ResourceList    = $resourceList
@@ -1004,9 +1056,9 @@ function Add-ConfigurationToVHDx
 
     Write-Verbose "Importing secrets"
     $secretsImportParams = @{
-        StoredSecretsPath     = $StoredSecretsPath
-        SecretsKeyPath        = $SecretsKeyPath
-        CompositeResourcePath = $CompositeResourcePath
+        StoredSecretsPath = $StoredSecretsPath
+        SecretsKeyPath    = $SecretsKeyPath
+        CompositeResource = $composite
     }
     $storedSecrets = Register-Secrets @secretsImportParams
 
@@ -1018,7 +1070,7 @@ function Add-ConfigurationToVHDx
         Write-Output "  Compiling and writing Config to directory: $MofStorePath"
         $configParams = @{
             TargetConfig               = $config
-            CompositeResourcePath      = $CompositeResourcePath
+            CompositeResource          = $composite
             ConfigurationDirectoryPath = $ConfigurationDirectoryPath
             StoredSecrets              = $storedSecrets
             SecretsKeyPath             = $SecretsKeyPath
@@ -1096,14 +1148,13 @@ function Add-DscResourcesToVHDx
         $DscResourcesPath,
         
         [parameter(Mandatory)]
-        [ValidateScript({Test-Path $_})]
-        [string]
-        $CompositeResourcePath
+        [DscCompositeResource[]]
+        $CompositeResource
     )
 
     $resourceDestinationPath = "${vhdxDriveLetter}:\Program Files\WindowsPowerShell\Modules"
 
-    $resourcesToInject = New-DscResourceList -DscResourcesPath $DscResourcesPath -CompositeResourcePath $CompositeResourcePath -DestinationDriveLetter $vhdxDriveLetter
+    $resourcesToInject = New-DscResourceList -DscResourcesPath $DscResourcesPath -CompositeResource $CompositeResource -DestinationDriveLetter $vhdxDriveLetter
 
     Write-Verbose "Injecting resources from $DscResourcesPath to VHDX at $VhdxPath"
     
@@ -2256,11 +2307,7 @@ function Initialize-DeploymentEnvironment
 
         [Parameter()]
         [switch]
-        $SanitizeModulePaths,
-
-        [Parameter()]
-        [switch]
-        $SeedDscResources
+        $SanitizeModulePaths
     )
 
     if ($SanitizeModulePaths.IsPresent)
@@ -2285,18 +2332,6 @@ function Initialize-DeploymentEnvironment
         }
 
         Write-Verbose "Sanitizing module directories complete."
-    }
-
-    if ($SeedDscResources)
-    {
-        Write-Verbose "Saving required DSC Resources to the specified DSC Resources path"
-        $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
-        $resourceList += $composite.Resources
-        $saveDscResourcesParams = @{
-            ResourceList    = $resourceList
-            DestinationPath = $DscResourcesPath
-        }
-        Save-CompositeDscResourceList @saveDscResourcesParams
     }
     
     #Required modules will be copied to the C:\Program Files\WindowsPowerShell\Modules  #logged in user's documents folder
@@ -2441,9 +2476,8 @@ function Write-CompositeConfig
         $TargetConfig,
 
         [parameter(Mandatory)]
-        [ValidateScript({Test-Path $_})]
-        [string]
-        $CompositeResourcePath,
+        [DscCompositeResource[]]
+        $CompositeResource,
 
         [parameter(Mandatory)]
         [ValidateScript({Test-Path $_})]
@@ -2481,9 +2515,7 @@ function Write-CompositeConfig
             }
         )
     }
-
-    $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
-
+    
     if ($TargetConfig.RoleList.Count -gt 1)
     {
         throw "Only a single role is supported when deploying from a comoposite resource"
@@ -2509,9 +2541,9 @@ function Write-CompositeConfig
 
     $keywords = $configAst.FindAll({($args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst])}, $true).CommandElements.Value
 
-    $resourceDeploymentList = $keywords.where({$_ -in $composite.Resource})
+    $resourceDeploymentList = $keywords.where({$_ -in $CompositeResource.Resource})
 
-    $params = $resourceDeploymentList.ForEach({ $resource = $_ ; $composite.where({$_.Resource -eq $resource})}).Parameters.Name | Select-Object -Unique
+    $params = $resourceDeploymentList.ForEach({ $resource = $_ ; $CompositeResource.where({$_.Resource -eq $resource})}).Parameters.Name | Select-Object -Unique
 
     foreach ($param in $params)
     {
@@ -2629,43 +2661,6 @@ function Write-Config
             throw "Failed to compile: $($partial.PartialPath).`r`nActual Error: " + $errormsg
         }
     }
-}
-
-function New-DscResourceList
-{
-    param
-    (
-        [Parameter()]
-        [string]
-        $DscResourcesPath,
-
-        [Parameter()]
-        [string]
-        $CompositeResourcePath,
-
-        [Parameter()]
-        [char]
-        $DestinationDriveLetter = "C"
-    )
-    
-    $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
-
-    #Create an array of all DSC resources required
-    $resourcesToCopy += $composite.Resources.ModuleName.foreach({
-        @{
-            Path="$DscResourcesPath\$_"
-            Destination="${DestinationDriveLetter}:\Program Files\WindowsPowerShell\Modules\$_"
-        }
-    })
-
-    #Add the composite resource to the list
-    $compositeResourceDirectoryName = Split-Path -Path $CompositeResourcePath -Leaf
-    $resourcesToCopy += @{
-        Path = $CompositeResourcePath
-        Destination="${DestinationDriveLetter}:\Program Files\WindowsPowerShell\Modules\$compositeResourceDirectoryName"
-     }
-    
-    return $resourcesToCopy
 }
 
 function Select-DscResource
@@ -3135,15 +3130,12 @@ function Register-Secrets
         $SecretsKeyPath,
 
         [Parameter(Mandatory)]
-        [ValidateScript({Test-Path $_})]
-        [string]
-        $CompositeResourcePath
+        [DscCompositeResource[]]
+        $CompositeResource
     )
 
-    $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
-
     #Find parameter types of pscredential
-    $secrets = $composite.ForEach(
+    $secrets = $CompositeResource.ForEach(
     {
         @{ResourceName=$_.Resource;Secrets=$_.Parameters.Where({$_.StaticType -eq "System.Management.Automation.PSCredential"}).Name}
     })

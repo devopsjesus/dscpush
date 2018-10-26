@@ -15,7 +15,6 @@ Import-Module -FullyQualifiedName $ModulePath -ErrorAction Stop
 
 InModuleScope $ModuleName {
 
-            
         $script:resourcesPath      = Join-Path -Path $env:Temp -ChildPath "resources"
         $script:compositePath      = Join-Path -Path $resourcesPath -ChildPath "CompositeResource"
         $compositeDscResourcesPath = Join-Path -Path $compositePath -ChildPath "DSCResources"
@@ -58,6 +57,16 @@ InModuleScope $ModuleName {
                 }
                 $null = New-Item @newItemParams
             })
+
+            #add a resource with no DSC Resource imports
+            $newItemParams = @{
+                Path = "$compositeDscResourcesPath\NoImports\NoImports.schema.psm1"
+                ItemType = "File"
+                Force = $true
+                Value = "Configuration NoImports {Param([parameter(Mandatory)] [string] `$NoImports)"
+            }
+            $null = New-Item @newItemParams
+            $resourceList += @{ ModuleName = "NoImports"; ModuleVersion = "1.0.0.0"  }
         }
         catch
         {
@@ -334,7 +343,7 @@ InModuleScope $ModuleName {
 
                 $composite.GetType().BaseType | Should -Be "Array"
                 $composite.ForEach({ $_.GetType().Name | Should -Be "DscCompositeResource" })
-                $composite.Count | Should -BeExactly $resourceList.Count
+                $composite.Count | Should -BeExactly ($resourceList.Count - 1) #No Imports Resource was added to ResourceList
                 $composite.Resource.ForEach({ $_ | Should -BeIn $resourceList.ModuleName })
                 $composite.Resources.ModuleName.ForEach({ $_ | Should -BeIn $resourceList.ModuleName })
                 $composite.Resources.ModuleVersion.ForEach({ $_ | Should -BeIn $resourceList.ModuleVersion })
