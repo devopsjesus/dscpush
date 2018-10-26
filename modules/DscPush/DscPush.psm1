@@ -1,4 +1,342 @@
-﻿<#
+﻿#region tests completed
+<#
+    .SYNOPSIS
+        Attempts to get module information from the passed in path.
+
+    .DESCRIPTION
+        This function will attempt to get the specified path's module information. If a module object cannot be returned,
+        the function will throw, otherwise, it returns the module object.
+
+    .PARAMETER Path
+        Path to PowerShell Composite Resource module.
+
+    .EXAMPLE
+        Get-PSScriptPatameterMetadata -Path $Path
+#>
+function Assert-CompositeModule
+{
+    Param
+    (
+        [Parameter(mandatory)]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $Path
+    )
+
+    try
+    {
+        return Get-Module -FullyQualifiedName $Path -ListAvailable -ErrorAction Stop
+    }
+    catch
+    {
+        throw "Could not find the module using path: $Path"
+    }
+}
+
+<#
+    .SYNOPSIS
+        Retrieves the AST of a DSC script and returns pertinent parameter metadata.
+
+    .DESCRIPTION
+        This function will parse a PS script's parameter block into AST and return all metadata.
+        Includes mandatory flags, other validations, and the parameter type.
+
+    .PARAMETER Path
+        Path to PowerShell script.
+
+    .EXAMPLE
+        Get-PSScriptPatameterMetadata -Path $Path
+#>
+function Get-PSScriptParameterMetadata
+{
+    Param
+    (
+        [Parameter(mandatory)]
+        [ValidatePattern(".*.ps1$|.*.psm1$")]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $Path
+    )
+
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
+
+    $parameterASTs = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
+    
+    $returnObjs = $parameterASTs | Select-Object Attributes, Name, StaticType
+
+    $paramCollection = @()
+
+    foreach ($object in $returnObjs)
+    {
+        $paramObj = @{
+            Name = ($object.Name.ToString()).TrimStart("$")
+            StaticType = $object.StaticType.ToString()
+            Attributes = @()
+        }
+
+        foreach ($attribute in $object.Attributes)
+        {
+            $namedArguments = $attribute.NamedArguments
+            $namedArgumentList = @()
+            foreach ($namedArgument in $namedArguments)
+            {
+                $namedArgumentList += $namedArgument.ArgumentName.ToString()
+            }
+
+            $positionalArguments = $attribute.positionalArguments
+            $positionalArgumentList = @()
+            foreach ($positionalArgument in $positionalArguments)
+            {
+                $positionalArgumentList += $positionalArgument.Extent.ToString()
+            }
+            
+            $paramAttributes = New-Object -TypeName psobject -Property @{
+                Name = $attribute.TypeName.ToString()
+                NamedArguments = $namedArgumentList
+                PositionalArguments = $positionalArgumentList
+            }
+            
+            $paramObj.Attributes += $paramAttributes
+        }
+
+        $paramCollection += $paramObj
+    }
+
+    return $paramCollection
+}
+
+<#
+    .SYNOPSIS
+        Analyze PowerShell script for any imported DSC resources (i.e. Import-DscResource cmdlet invoked).
+
+    .DESCRIPTION
+        This function will parse a PS script AST and return all resource names and versions of imported dsc resources.
+
+    .PARAMETER Path
+        Path to PowerShell script.
+
+    .EXAMPLE
+        Get-RequiredDscResourcesList -Path $Path
+#>
+function Get-RequiredDscResourceList
+{
+    Param
+    (
+        [Parameter(mandatory)]
+        [ValidatePattern(".*.ps1$|.*.psm1$")]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $Path
+    )
+    
+    #Parse powershell script to AST
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
+
+    #Find every Import-DscResource cmdlet
+    [array]$resourceStatements = $ast.FindAll({($args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]) -and ($args[0].CommandElements.Value -contains 'Import-DscResource')}, $true) 
+    
+    #Because the syntax and use of the Import-DscResource is highly regulated, we can make some assumptions here:
+    #ModuleName must be the first parameter specified, so it's value is stored in the third index of the CommandElements array
+    #ModuleVersion would always be specified after the ModuleName parameter, so it would be in the fifth index of the array
+    #We disallow use of the Name parameter here, because it's not supported or suggested
+    if ("Name" -in $resourceStatements.CommandElements.ParameterName)
+    {
+        throw "$Path - Use of the 'Name' parameter when calling Import-DscResource is not supported."
+    }
+
+    $resourceList = @()
+
+    foreach ($resource in $resourceStatements)
+    { 
+        if ($resource.CommandElements.Count -lt 5)
+        {
+            throw "$Path - Missing ModuleVersion parameter in config."
+        }
+        $resourceList += @{
+            ModuleName = $resource.CommandElements[2].Value
+            ModuleVersion = $resource.CommandElements[4].Value
+        }
+    }
+
+    return $resourceList.Where({$_.ModuleName -ne "PSDesiredStateConfiguration"})
+}
+
+<#
+    .SYNOPSIS
+        Analyze PowerShell script for any configuration statements.
+    
+    .DESCRIPTION
+        This function will parse a PS script AST and return all configuration statement names.
+
+    .PARAMETER Path
+        Path to Powershell script.
+
+    .EXAMPLE
+        Get-DscConfigurationName -Path $Path
+#>
+function Get-DscConfigurationName
+{
+    Param
+    (
+        [Parameter(mandatory)]
+        [ValidatePattern(".*.ps1$")]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $Path
+    )
+
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$Null)
+
+    #Find all AST of type ConfigurationDefinitionAST, this will allow us to find the name of each config
+    $configurationAst = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ConfigurationDefinitionAst]}, $true)
+
+    #If we find more than one configuration statement, throw, because that is not supported
+    if ($configurationAst.count -ne 1)
+    {
+        throw "$Path - Only one configuration statements is supported in each script"
+    }
+
+    return $configurationAst.InstanceName.Value
+}
+
+<#
+    .SYNOPSIS
+        Analyze PowerShell DSC Composite Resource file.
+    
+    .DESCRIPTION
+        This function will parse a PS script AST and return all configuration statement names.
+
+    .PARAMETER Path
+        Path to Powershell script.
+
+    .EXAMPLE
+        Get-DscConfigurationName -Path $Path
+#>
+function Get-DscCompositeMetaData
+{
+    Param
+    (
+        [Parameter(mandatory)]
+        [ValidateScript({Test-Path $_})]
+        [string]
+        $Path
+    )
+
+    $moduleInfo = Assert-CompositeModule -Path $Path
+    
+    $resources = $moduleInfo.ExportedDscResources
+
+    $compositeResources = @()
+    foreach ($resource in $resources)
+    {
+        $resourcePath = Join-Path -Path $Path -ChildPath "DSCResources\$resource\$resource.schema.psm1"
+
+        Write-Verbose "Parsing $resourcePath"
+        $parameters = @(Get-PSScriptParameterMetadata -Path $resourcePath)
+        $requiredResourceList = Get-RequiredDscResourceList -Path $resourcePath
+        
+        $compositeValues = @{
+            Resource = $resource
+            Resources = $requiredResourceList
+            Parameters = $parameters
+        }
+        $compositeResources += New-DscCompositeResource @compositeValues
+    }
+
+    return $compositeResources
+}
+
+<#
+    .SYNOPSIS
+        Converts PS hashtable objects (hashtable arrays included) to text output for later ingestion.
+
+    .DESCRIPTION
+        This function will recursively produces a string output of hashtable contents.
+        Must start with a hashtable or hashtable array - TODO: add similar function for psobjects
+
+    .PARAMETER InputObject
+
+    .EXAMPLE
+        ConvertFrom-Hashtable -InputObject @{key="value"}
+#>
+Function ConvertFrom-Hashtable
+{
+    param
+    (
+        [parameter(Mandatory)]
+        $InputObject
+    )
+    $hashstr = ""
+
+    if ($InputObject -is [array])
+    {
+        $hashstr = "@("
+    }
+    elseif ($InputObject -isnot [hashtable])
+    {
+        throw "Only hashtables and array objects are supported."
+    }
+
+    foreach ($object in $InputObject)
+    { 
+        $keys = $object.keys
+
+        $hashstr += "@{"
+
+        foreach ($key in $keys)
+        {
+            $value = $object[$key]
+            
+            if ($value -is [hashtable])
+            {
+                $hashstr = $hashstr + $key + "=" + $(ConvertFrom-Hashtable $value) + ";"
+            }
+            elseif ($value -is [array])
+            {
+                $arrayString = "@("
+
+                foreach ($arrayValue in $value)
+                {
+                    if ($arrayValue -is [array])
+                    {
+                        $parsedValue = ConvertFrom-Hashtable $arrayValue
+                    }
+                    else
+                    {
+                        $parsedValue = "`"$arrayValue`","
+                    }
+                    $arrayString += $parsedValue
+                }
+
+                $arrayString = $arrayString.Trim(",")
+                $arrayString += ")"
+
+                $hashstr += $key + "=" + $arrayString + ";" 
+            } #TODO: add support for psobject
+            elseif ($key -match "\s") 
+            {
+                $hashstr += "`"$key`"" + "=" + "`"$value`"" + ";"
+            }
+            else {
+                $hashstr += $key + "=" + "`"$value`"" + ";" 
+            }
+        }
+
+        $hashstr = $hashstr.Trim(";")
+        $hashstr += "};"
+    }
+
+    $hashstr = $hashstr.Trim(";")
+
+    if ($InputObject -is [array])
+    {
+        $hashstr += ");"
+    }
+
+    return $hashstr
+}
+#endregion tests completed
+<#
     .SYNOPSIS
         Initializes the required configuration files necessary to configure DscPush.
 
@@ -1239,172 +1577,6 @@ function Publish-TargetConfig
 
 <#
     .SYNOPSIS
-        Retrieves the AST of a DSC script and returns pertinent parameter metadata.
-
-    .DESCRIPTION
-        This function will parse a PS script's parameter block into AST and return all metadata.
-        Includes mandatory flags, other validations, and the parameter type.
-
-    .PARAMETER Path
-        Path to PowerShell script.
-
-    .EXAMPLE
-        Get-PSScriptPatameterMetadata -Path $Path
-#>
-function Get-PSScriptParameterMetadata
-{
-    Param
-    (
-        [Parameter(mandatory)]
-        [ValidatePattern(".*.ps1$|.*.psm1$")]
-        [ValidateScript({Test-Path $_})]
-        [string]
-        $Path
-    )
-
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
-
-    $parameterASTs = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
-    
-    $returnObjs = $parameterASTs | Select-Object Attributes, Name, StaticType
-
-    $paramCollection = @()
-
-    foreach ($object in $returnObjs)
-    {
-        $paramObj = @{
-            Name = ($object.Name.ToString()).TrimStart("$")
-            StaticType = $object.StaticType.ToString()
-            Attributes = @()
-        }
-
-        foreach ($attribute in $object.Attributes)
-        {
-            $namedArguments = $attribute.NamedArguments
-            $namedArgumentList = @()
-            foreach ($namedArgument in $namedArguments)
-            {
-                $namedArgumentList += $namedArgument.ArgumentName.ToString()
-            }
-
-            $positionalArguments = $attribute.positionalArguments
-            $positionalArgumentList = @()
-            foreach ($positionalArgument in $positionalArguments)
-            {
-                $positionalArgumentList += $positionalArgument.Extent.ToString()
-            }
-            
-            $paramAttributes = New-Object -TypeName psobject -Property @{
-                Name = $attribute.TypeName.ToString()
-                NamedArguments = $namedArgumentList
-                PositionalArguments = $positionalArgumentList
-            }
-            
-            $paramObj.Attributes += $paramAttributes
-        }
-
-        $paramCollection += $paramObj
-    }
-
-    return $paramCollection
-}
-
-<#
-    .SYNOPSIS
-        Analyze PowerShell script for any imported DSC resources (i.e. Import-DscResource cmdlet invoked).
-
-    .DESCRIPTION
-        This function will parse a PS script AST and return all resource names and versions of imported dsc resources.
-
-    .PARAMETER Path
-        Path to PowerShell script.
-
-    .EXAMPLE
-        Get-RequiredDscResourcesList -Path $Path
-#>
-function Get-RequiredDscResourceList
-{
-    Param
-    (
-        [Parameter(mandatory)]
-        [ValidatePattern(".*.ps1$|.*.psm1$")]
-        [ValidateScript({Test-Path $_})]
-        [string]
-        $Path
-    )
-    
-    #Parse powershell script to AST
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$null)
-
-    #Find every Import-DscResource cmdlet
-    [array]$resourceStatements = $ast.FindAll({($args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst]) -and ($args[0].CommandElements.Value -contains 'Import-DscResource')}, $true) 
-    
-    #Because the syntax and use of the Import-DscResource is highly regulated, we can make some assumptions here:
-    #ModuleName must be the first parameter specified, so it's value is stored in the third index of the CommandElements array
-    #ModuleVersion would always be specified after the ModuleName parameter, so it would be in the fifth index of the array
-    #We disallow use of the Name parameter here, because it's not supported or suggested
-    if ("Name" -in $resourceStatements.CommandElements.ParameterName)
-    {
-        throw "$Path - Use of the 'Name' parameter when calling Import-DscResource is not supported."
-    }
-
-    $resourceList = @()
-
-    foreach ($resource in $resourceStatements)
-    { 
-        if ($resource.CommandElements.Count -lt 5)
-        {
-            throw "$Path - Missing ModuleVersion parameter in config."
-        }
-        $resourceList += @{
-            ModuleName = $resource.CommandElements[2].Value
-            ModuleVersion = $resource.CommandElements[4].Value
-        }
-    }
-
-    return $resourceList.Where({$_.ModuleName -ne "PSDesiredStateConfiguration"})
-}
-
-<#
-    .SYNOPSIS
-        Analyze PowerShell script for any configuration statements.
-    
-    .DESCRIPTION
-        This function will parse a PS script AST and return all configuration statement names.
-
-    .PARAMETER Path
-        Path to Powershell script.
-
-    .EXAMPLE
-        Get-DscConfigurationName -Path $Path
-#>
-function Get-DscConfigurationName
-{
-    Param
-    (
-        [Parameter(mandatory = $true)]
-        [ValidatePattern(".*.ps1$")]
-        [ValidateScript({Test-Path $_})]
-        [string]
-        $Path
-    )
-
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$Null)
-
-    #Find all AST of type ConfigurationDefinitionAST, this will allow us to find the name of each config
-    $configurationAst = $ast.FindAll({$args[0] -is [System.Management.Automation.Language.ConfigurationDefinitionAst]}, $true)
-
-    #If we find more than one configuration statement, throw, because that is not supported
-    if ($configurationAst.count -ne 1)
-    {
-        throw "$Path - Only one configuration statements is supported in each script"
-    }
-
-    return $configurationAst.InstanceName.Value
-}
-
-<#
-    .SYNOPSIS
         Saves (overwrites) all the resources required for the partials in the specified directory.
 
     .DESCRIPTION
@@ -1452,7 +1624,7 @@ function Save-CompositeDscResourceList
             Continue
         }
 
-        $resourceDestPath = Join-Path -Path $DscResourcesPath -ChildPath $resource.ModuleName
+        $resourceDestPath = Join-Path -Path $DestinationPath -ChildPath $resource.ModuleName
         if (Test-Path $resourceDestPath)
         {
             Remove-Item -Path $resourceDestPath -Recurse -Force -ErrorAction Stop
@@ -1463,12 +1635,12 @@ function Save-CompositeDscResourceList
             $currentProgressPreference = $ProgressPreference
             $ProgressPreference = 'SilentlyContinue'
 
-             Write-Verbose "Saving DSC Resource: $resource to $DscResourcesPath"
-             Save-Module -Name $resource.ModuleName -RequiredVersion $resource.ModuleVersion -Path $DscResourcesPath -Force -ErrorAction Stop
+             Write-Verbose "Saving DSC Resource: $resource to $DestinationPath"
+             Save-Module -Name $resource.ModuleName -RequiredVersion $resource.ModuleVersion -Path $DestinationPath -Force -ErrorAction Stop
         }
         catch
         {
-            throw "Could not save DSC Resource: $resource to $DscResourcesPath"
+            throw "Could not save DSC Resource: $resource to $DestinationPath"
         }
         finally
         {
@@ -1555,70 +1727,6 @@ function Save-DscResourceList
             $ProgressPreference = $currentProgressPreference
         }
     }
-}
-
-<#
-    .SYNOPSIS
-        Recursively produces a string output of hashtable contents (currently hashtable and array objs)
-        Must start with a Hashtable - TODO: add similar function, but starting with array
-
-    .PARAMETER InputObject
-#>
-Function ConvertFrom-Hashtable
-{
-    param
-    (
-        [parameter(Mandatory)]
-        [hashtable]
-        $InputObject
-    )
-
-    $hashstr = "@{"
-            
-    $keys = $InputObject.keys
-
-    foreach ($key in $keys)
-    { 
-        $value = $InputObject[$key]
-            
-        if ($value.GetType().Name -like "*hashtable*")
-        {
-            $hashstr += $key + "=" + $(ConvertFrom-Hashtable $value) + ";"
-        }
-        elseif ($value.GetType().BaseType -like "*array*")
-        {
-            $arrayString = "@("
-
-            foreach ($arrayValue in $value)
-            {
-                if ($arrayValue.GetType().Name -like "*hashtable*")
-                {
-                    $parsedValue = ConvertFrom-Hashtable $arrayValue
-                }
-                else
-                {
-                    $parsedValue = "`"$arrayValue`"" + "," 
-                }
-                $arrayString += $parsedValue
-            }
-
-            $arrayString = $arrayString.Trim(",")
-            $arrayString += ")"
-
-            $hashstr += $key + "=" + $arrayString + ";" 
-        }
-        elseif ($key -match "\s") 
-        {
-            $hashstr += "`"$key`"" + "=" + "`"$value`"" + ";"
-        }
-        else {
-            $hashstr += $key + "=" + "`"$value`"" + ";" 
-        } 
-    }
-            
-    $hashstr += "};"
-
-    return $hashstr
 }
 
 function Export-NodeDefinitionFile
@@ -2183,7 +2291,7 @@ function Initialize-DeploymentEnvironment
     {
         Write-Verbose "Saving required DSC Resources to the specified DSC Resources path"
         $composite = Get-DscCompositeMetaData -Path $CompositeResourcePath
-        $resourceList += $composite.Resources.ModuleName
+        $resourceList += $composite.Resources
         $saveDscResourcesParams = @{
             ResourceList    = $resourceList
             DestinationPath = $DscResourcesPath
@@ -2325,54 +2433,6 @@ function Connect-TargetAdapter
     }
 }
 
-function Get-DscCompositeMetaData
-{
-    Param
-    (
-        [Parameter()]
-        [string]
-        $Path = "C:\Library\deploy\resources\RoleDeploy"
-    )
-
-    $rootPath = Get-Item $Path -ErrorAction Stop
-
-    if ($rootPath -isnot [System.IO.DirectoryInfo])
-    {
-        throw "Please use the root path of the module that contains the resources"
-    }
-
-    $moduleManifestPath = Join-Path -Path $rootPath -ChildPath "$($rootPath.Name).psd1"
-
-    if (! (Test-Path $moduleManifestPath))
-    {
-        throw "Cannot find module manifest file at: $moduleManifestPath"
-    }
-
-    $moduleManifestData = Import-PowerShellDataFile $moduleManifestPath
-
-    $resources = $moduleManifestData.DscResourcesToExport
-
-    $compositeResources = @()
-    foreach ($resource in $resources)
-    {
-        $resourcePath = Join-Path -Path $Path -ChildPath "DSCResources\$resource\$resource.schema.psm1"
-
-        Write-Verbose "Parsing $resourcePath"
-        $parameters = @(Get-PSScriptParameterMetadata -Path $resourcePath)
-        $requiredResourceList = Get-RequiredDscResourceList -Path $resourcePath
-        
-        $compositeValues = @{
-            #Name = Get-DscConfigurationName -Path $CompositeResourcePath
-            Resource = $resource
-            Resources = $requiredResourceList
-            Parameters = $parameters
-        }
-        $compositeResources += New-DscCompositeResource @compositeValues
-    }
-
-    return $compositeResources
-}
-
 function Write-CompositeConfig
 {
     param
@@ -2391,7 +2451,7 @@ function Write-CompositeConfig
         $ConfigurationDirectoryPath,
 
         [parameter(Mandatory)]
-        $storedSecrets,
+        $StoredSecrets,
 
         [parameter()]
         [ValidateScript({Test-Path $_})]
@@ -2435,7 +2495,14 @@ function Write-CompositeConfig
     {
         throw "Configuration $($TargetConfig.RoleList) not found at $ConfigurationDirectoryPath"
     }
+    
+    Write-Verbose "Retrieve secrets key"
+    if ($SecretsKeyPath)
+    {
+        [byte[]] $secretsKey = Get-Content $SecretsKeyPath -ErrorAction Stop
+    }
 
+    Write-Verbose "Retrieving resources and required data values"
     $configName = Get-DscConfigurationName -Path $configFile.FullName
 
     $configAst = [System.Management.Automation.Language.Parser]::ParseFile($configFile.FullName, [ref]$null, [ref]$Null)
@@ -2443,11 +2510,6 @@ function Write-CompositeConfig
     $keywords = $configAst.FindAll({($args[0] -is [System.Management.Automation.Language.DynamicKeywordStatementAst])}, $true).CommandElements.Value
 
     $resourceDeploymentList = $keywords.where({$_ -in $composite.Resource})
-
-    if ($SecretsKeyPath)
-    {
-        [byte[]] $secretsKey = Get-Content $SecretsKeyPath
-    }
 
     $params = $resourceDeploymentList.ForEach({ $resource = $_ ; $composite.where({$_.Resource -eq $resource})}).Parameters.Name | Select-Object -Unique
 
