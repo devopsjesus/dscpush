@@ -24,7 +24,7 @@ InModuleScope $ModuleName {
         $currentPsModulePath = $env:PSModulePath
         $env:PSModulePath += ";$resourcesPath"
 
-        $resourceList = @(
+        $script:resourceList = @(
             @{ ModuleName = "xDnsServer"                  ; ModuleVersion = "1.11.0.0" }
             @{ ModuleName = "xNetworking"                 ; ModuleVersion = "5.7.0.0"  }
             @{ ModuleName = "xComputerManagement"         ; ModuleVersion = "4.1.0.0"  }
@@ -37,7 +37,6 @@ InModuleScope $ModuleName {
         try
         {
             $null = New-Item -Path $compositePath -ItemType Directory -Force
-            $null = New-ModuleManifest -Path (Join-Path -Path $compositePath -ChildPath "CompositeResource.psd1") -DscResourcesToExport $resourceList.ModuleName
             $null = New-Item -Path $compositeDscResourcesPath -ItemType Directory -Force
                 
             $resourceList.ForEach({
@@ -66,7 +65,10 @@ InModuleScope $ModuleName {
                 Value = "Configuration NoImports {Param([parameter(Mandatory)] [string] `$NoImports)"
             }
             $null = New-Item @newItemParams
-            $resourceList += @{ ModuleName = "NoImports"; ModuleVersion = "1.0.0.0"  }
+            $script:resourceList += @{ ModuleName = "NoImports"; ModuleVersion = "1.0.0.0"  }
+
+            #add the module manifest with all the resources included
+            $null = New-ModuleManifest -Path (Join-Path -Path $compositePath -ChildPath "CompositeResource.psd1") -DscResourcesToExport $resourceList.ModuleName
         }
         catch
         {
@@ -221,17 +223,17 @@ InModuleScope $ModuleName {
                 @{ ModuleName = "xNetworking"        ; ModuleVersion = "5.7.0.0" }
                 @{ ModuleName = "xComputerManagement"; ModuleVersion = "4.1.0.0" }
             )
-            $resourceList = Get-RequiredDscResourceList -Path $ConfigPath
+            $requiredResourceList = Get-RequiredDscResourceList -Path $ConfigPath
 
-            It "ModuleName <ModuleName> & ModuleVersion <ModuleVersion> are returned correctly" -TestCases $resourceList {
+            It "ModuleName <ModuleName> & ModuleVersion <ModuleVersion> are returned correctly" -TestCases $requiredResourceList {
                 param ( $ModuleName, $ModuleVersion )
 
-                $resourceList.Where({$ModuleName -eq $_.ModuleName}).ModuleName | Should -BeIn $correctReturn.ModuleName
-                $resourceList.Where({$ModuleName -eq $_.ModuleName}).ModuleVersion | Should -BeIn $correctReturn.ModuleVersion
+                $requiredResourceList.Where({$ModuleName -eq $_.ModuleName}).ModuleName | Should -BeIn $correctReturn.ModuleName
+                $requiredResourceList.Where({$ModuleName -eq $_.ModuleName}).ModuleVersion | Should -BeIn $correctReturn.ModuleVersion
             }
 
             It "Returns the correct number of resources" {
-                $resourceList.count | Should -Be 2
+                $requiredResourceList.count | Should -Be 2
             }
         }
 
@@ -343,7 +345,7 @@ InModuleScope $ModuleName {
 
                 $composite.GetType().BaseType | Should -Be "Array"
                 $composite.ForEach({ $_.GetType().Name | Should -Be "DscCompositeResource" })
-                $composite.Count | Should -BeExactly ($resourceList.Count - 1) #No Imports Resource was added to ResourceList
+                $composite.Count | Should -BeExactly $script:resourceList.Count
                 $composite.Resource.ForEach({ $_ | Should -BeIn $resourceList.ModuleName })
                 $composite.Resources.ModuleName.ForEach({ $_ | Should -BeIn $resourceList.ModuleName })
                 $composite.Resources.ModuleVersion.ForEach({ $_ | Should -BeIn $resourceList.ModuleVersion })
@@ -372,9 +374,9 @@ InModuleScope $ModuleName {
 
             Mock -CommandName "Save-Module" -MockWith { New-Item -Path "$script:resourcesPath\$Name\$RequiredVersion" -ItemType Directory }
 
-            $script:resourceList = $script:composite.Resources
+            #$script:resourceList = $script:composite.Resources
             
-            Save-CompositeDscResourceList -ResourceList $resourceList -DestinationPath $script:resourcesPath
+            Save-CompositeDscResourceList -ResourceList $script:resourceList -DestinationPath $script:resourcesPath
 
             It "Saves the required DSC resources to the specified path" -TestCases $resourceList {
                 
@@ -560,6 +562,41 @@ InModuleScope $ModuleName {
                 Compare-Object -ReferenceObject $reconsitutedHashtable.Hashtable2.Array2 -DifferenceObject $inputObject.Hashtable2.Array2 | Should -BeNullOrEmpty
                 Compare-Object -ReferenceObject $reconsitutedHashtable.Hashtable2.NestedKey2 -DifferenceObject $inputObject.Hashtable2.NestedKey2 | Should -BeNullOrEmpty
                 Compare-Object -ReferenceObject $reconsitutedHashtable.Key2 -DifferenceObject $inputObject.Key2 | Should -BeNullOrEmpty
+            }
+        }
+    }
+
+    Describe "New-DscResourceList" {
+    
+        Context "Normal Operations" {
+
+            $params = @{
+                CompositeResource      = $script:composite
+                DscResourcesPath       = $script:resourcesPath
+                DestinationDriveLetter = "Q"
+            }
+            $resourceFileList = New-DscResourceList @params
+            
+            It "Contains the local and destination paths for the passed in parameters" -TestCases $resourceFileList {
+                
+                Param( $Path, $Destination )
+
+                Split-Path -Path $Path -Parent | Should -Be $script:resourcesPath
+                Split-Path -Path $Path -Leaf | Should -BeIn $script:resourceList.ModuleName
+
+                Split-Path -Path $Destination -Parent | Should -Be "Q:\Program Files\WindowsPowerShell\Modules"
+                Split-Path -Path $Destination -Leaf | Should -BeIn $script:resourceList.ModuleName
+
+                #count is less than 1 becaues NoImports has no required resources to copy
+                $resourceFileList.Count | Should -BeExactly ($resourceList.Count - 1) 
+            }
+        }
+
+        Context "Bad Input" {
+            
+            It "-" {
+                
+
             }
         }
     }

@@ -26,22 +26,7 @@ param(
     $VmNetworkAddressList
 )
 
-Write-Verbose "Add the IP list of the target VMs ($VmNetworkAddressList) to the trusted host list"
-$currentTrustedHost = (Get-Item "WSMan:\localhost\Client\TrustedHosts").Value
-if(($currentTrustedHost -ne '*') -and ([string]::IsNullOrEmpty($currentTrustedHost) -eq $false))
-{
-    $scriptTrustedHost = @($currentTrustedHost,$($VmNetworkAddressList -join ", ")) -join ", "
-    Write-Verbose "Setting Trusted Hosts List to: $scriptTrustedHost"
-    Set-Item -Path "WSMan:\localhost\Client\TrustedHosts" -Value $scriptTrustedHost -Force
-}
-elseif($currentTrustedHost -ne '*')
-{
-    $scriptTrustedHost = $VmNetworkAddressList -join ", "
-    Write-Verbose "Setting Trusted Hosts List to: $scriptTrustedHost"
-    Set-Item -Path "WSMan:\localhost\Client\TrustedHosts" -Value $scriptTrustedHost -Force
-}
-
-Describe "DscPush Workshop Deployment" {
+Describe "DscPush Deployment" {
     Context "VM DSC State" {
         
         #region Prepare for test
@@ -75,10 +60,4 @@ Describe "DscPush Workshop Deployment" {
             { Get-DscConfiguration -CimSession $cimSession -ErrorAction Stop } | Should Not Throw
         }
     }
-}
-
-Set-Item -Path WSMan:\localhost\Client\TrustedHosts -Value $currentTrustedHost -Force
-if($currentWinRMStatus.Status -eq 'Stopped')
-{
-    Stop-Service WinRM -Force
 }

@@ -341,12 +341,24 @@ Function ConvertFrom-Hashtable
         Generates a list of required DSC Resources' local paths and destinations.
 
     .DESCRIPTION
-        This function will 
+        This function will generate a hashtable array that contains the local paths and destination paths of the 
+        passed in DscCompositeResource object(s)'s required Resources.
 
-    .PARAMETER InputObject
+    .PARAMETER DscResourcesPath
+        The root directory to where DSC Resources are stored.
+
+    .PARAMETER CompositeResource
+        A DscCompositeResource type object array, which contains the list of resources.
+
+    .PARAMETER DestinationDriveLetter
+        The root directory to the DSC Resources' Destination paths, used when injecting configurations.
 
     .EXAMPLE
-        ConvertFrom-Hashtable -InputObject @{key="value"}
+        $params = @{
+            CompositeResource = $composite
+            DscResourcesPath  = "C:\workspace\resources"
+        }
+        New-DscResourceList @params
 #>
 function New-DscResourceList
 {
@@ -365,8 +377,7 @@ function New-DscResourceList
         $DestinationDriveLetter = "C"
     )
 
-    #Create an array of all DSC resources required
-    $resourcesToCopy += $CompositeResource.Resources.ModuleName.foreach({
+    $resourcesToCopy = $CompositeResource.Resources.ModuleName.foreach({
         @{
             Path="$DscResourcesPath\$_"
             Destination="${DestinationDriveLetter}:\Program Files\WindowsPowerShell\Modules\$_"
@@ -1042,17 +1053,15 @@ function Add-ConfigurationToVHDx
         Save-CompositeDscResourceList @saveDscResourcesParams
     }
 
-    $moduleDestPath = $env:PSModulePath.Split(";")[1]
-
-    Write-Verbose "Copy Modules to host's module path"
-    if (!(Test-Path $moduleDestPath))
+    #Required modules will be copied to the PS Module Path
+    $moduleDestPath = Join-Path -Path $env:ProgramFiles -ChildPath "WindowsPowerShell\Modules"
+    if (($moduleDestPath -notin ($env:PSModulePath).Split(";")) -or (! (Test-Path $moduleDestPath)))
     {
-        New-Item -Path $moduleDestPath -ItemType Directory
+        throw "You have jacked up Environmental Variables..."
     }
+    
     Copy-Item -Path "$ContentStoreModulePath\*" -Destination $moduleDestPath -Recurse -Force -ErrorAction Stop
-
-    Write-Verbose "Copy DSC Resources to the host's module path"
-    Copy-Item -Path "$DscResourcesPath\*" -Destination $moduleDestPath -Recurse -Force
+    Copy-Item -Path "$DscResourcesPath\*" -Destination $moduleDestPath -Recurse -Force -ErrorAction Stop
 
     Write-Verbose "Importing secrets"
     $secretsImportParams = @{
@@ -1125,10 +1134,10 @@ function Add-ConfigurationToVHDx
         }
 
         Write-Verbose "Adding DSC Resources from $DscResourcesPath"
-        Add-DscResourcesToVHDx -DscResourcesPath $DscResourcesPath -CompositeResourcePath $CompositeResourcePath -vhdxDriveLetter $vhdxDriveLetter
+        Add-DscResourcesToVHDx -DscResourcesPath $DscResourcesPath -CompositeResource $composite -VhdxDriveLetter $vhdxDriveLetter
 
         Write-Verbose "Adding content store from $ContentStorePath"
-        Add-ContentStoreToVHDx -ContentStorePath $contentStorePath -vhdxDriveLetter $vhdxDriveLetter
+        Add-ContentStoreToVHDx -ContentStorePath $contentStorePath -VhdxDriveLetter $vhdxDriveLetter
 
         $null = Dismount-VHD -Path $VhdxPath
     }
@@ -1152,17 +1161,13 @@ function Add-DscResourcesToVHDx
         $CompositeResource
     )
 
-    $resourceDestinationPath = "${vhdxDriveLetter}:\Program Files\WindowsPowerShell\Modules"
-
     $resourcesToInject = New-DscResourceList -DscResourcesPath $DscResourcesPath -CompositeResource $CompositeResource -DestinationDriveLetter $vhdxDriveLetter
 
     Write-Verbose "Injecting resources from $DscResourcesPath to VHDX at $VhdxPath"
-    
     foreach ($resource in $resourcesToInject)
-        {
+    {
         try
         {
-            $null = New-Item -Path $resource.Destination -ItemType Directory -Force -ErrorAction Stop
             $null = & xcopy.exe $resource.Path "$($resource.Destination)\*" /R /Y /E
         }
         catch
@@ -1195,7 +1200,7 @@ function Add-ContentStoreToVHDx
         {
         $contentStoreDestinationPath = "${vhdxDriveLetter}:\ContentStore"
 
-        if (! (Test-Path $contentStoreDestinationPath))
+        <#if (! (Test-Path $contentStoreDestinationPath))
         {
             try
             {
@@ -1205,7 +1210,7 @@ function Add-ContentStoreToVHDx
             {
                 throw "Could not create content store directory on mounted drive."
             }
-        }
+        }#>
 
         $null = & xcopy.exe "$contentStorePath" "$contentStoreDestinationPath\*" /R /Y /E
     }
@@ -2333,23 +2338,19 @@ function Initialize-DeploymentEnvironment
 
         Write-Verbose "Sanitizing module directories complete."
     }
-    
-    #Required modules will be copied to the C:\Program Files\WindowsPowerShell\Modules  #logged in user's documents folder
-    $moduleDestPath = $env:PSModulePath.Split(";")[1]
 
     #Unblock the content store
     Get-ChildItem $ContentStoreRootPath -Recurse | Unblock-File
     
-    #Copy Modules to host's module path
-    if (!(Test-Path $moduleDestPath))
+    #Required modules will be copied to the PS Module Path
+    $moduleDestPath = Join-Path -Path $env:ProgramFiles -ChildPath "WindowsPowerShell\Modules"
+    if (($moduleDestPath -notin ($env:PSModulePath).Split(";")) -or (! (Test-Path $moduleDestPath)))
     {
-        New-Item -Path $moduleDestPath -ItemType Directory
+        throw "You have jacked up Environmental Variables..."
     }
-
+    
     Copy-Item -Path "$ContentStoreModulePath\*" -Destination $moduleDestPath -Recurse -Force -ErrorAction Stop
-
-    #Copy DSC Resources to the host's module path
-    Copy-Item -Path "$DscResourcesPath\*" -Destination $moduleDestPath -Recurse -Force
+    Copy-Item -Path "$DscResourcesPath\*" -Destination $moduleDestPath -Recurse -Force -ErrorAction Stop
 
     # Ensure WinRM is running
     if ((Get-Service "WinRM" -ErrorAction Stop).status -eq 'Stopped') 

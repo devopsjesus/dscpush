@@ -2,7 +2,12 @@
 (
     [parameter()]
     [string]
-    $WorkspacePath = "C:\dscpush-master",
+    $WorkspacePath = "C:\Library\Deploy",
+
+    [parameter()]
+    [ValidateScript({Test-Path $_})]
+    [string]
+    $CompositeResourcePath = "$WorkspacePath\resources\RoleDeploy",
     
     [parameter()]
     [switch]
@@ -10,7 +15,7 @@
     
     [parameter()]
     [string]
-    $VhdxPath = "C:\VirtualHardDisks\win2016core-20180924.vhdx",
+    $VhdxPath = "C:\VirtualHardDisks\win2016.vhdx",
     
     [parameter()]
     [switch]
@@ -30,28 +35,25 @@
 
     [parameter()]
     [string]
-    $NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\CompositeDeploy.ps1"
+    $NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
 )
 
 #region vars
 #global vars
 $targetLCMSettings = @{
-    ConfigurationModeFrequencyMins   = 15
-    RebootNodeIfNeeded               = $True
-    ConfigurationMode                = "ApplyAndAutoCorrect"
-    ActionAfterReboot                = "ContinueConfiguration"
-    RefreshMode                      = "Push"
-    AllowModuleOverwrite             = $true
-    DebugMode                        = "None"
+    ConfigurationModeFrequencyMins = 15
+    RebootNodeIfNeeded             = $True
+    ConfigurationMode              = "ApplyAndAutoCorrect"
+    ActionAfterReboot              = "ContinueConfiguration"
+    RefreshMode                    = "Push"
+    AllowModuleOverwrite           = $true
+    DebugMode                      = "None"
 }
 
 #shared vars
 $dscPushModulePath = "$WorkspacePath\Modules\DSCPush"
 
-$NodeDefinitionFilePath = "$WorkspacePath\DSCPushSetup\DefinitionStore\compositeDeploy.ps1"
-
 #default vars
-$CompositeResourcePath       = "$WorkspacePath\resources\RoleDeploy"
 $ConfigurationDirectoryPath  = "$WorkspacePath\configs"
 $contentStoreRootPath        = "$WorkspacePath\ContentStore"
 $ContentStoreDestPath        = "C:\ContentStore"
@@ -89,7 +91,6 @@ if ($injectConfig)
         DscResourcesPath           = $DscResourcesPath
         CompositeResourcePath      = $CompositeResourcePath
         ContentStorePath           = $contentStoreRootPath
-        SeedDscResources           = $false
     }
     Add-ConfigurationToVHDx @configInjectionParams
     
@@ -103,8 +104,6 @@ if ($injectConfig)
 	        Credential             = $DeploymentCredential
             AdapterCount           = 1
             TargetSubnet           = "255.255.255.0"
-            Clobber                = $true
-            DifferencingDisks      = $true
             NodeDefinitionFilePath = $NodeDefinitionFilePath
         }
         & $hyperVDeployScriptPath @deploymentParams
@@ -130,7 +129,7 @@ else
     }
 
     $publishTargetSettings = @{
-        SanitizeModulePaths         = $true
+        SanitizeModulePaths         = $false
         CopyContentStore            = $true
         CopyDscResources            = $true
         SeedDscResources            = $true
