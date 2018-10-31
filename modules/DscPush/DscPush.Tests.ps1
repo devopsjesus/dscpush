@@ -34,6 +34,10 @@ InModuleScope $ModuleName {
             @{ ModuleName = "CustomModule"                ; ModuleVersion = "1.1.0.0"  }
         )
 
+        #Create the CustomModule ahead of time, because those files would already exist
+        New-Item -Path (Join-Path -Path $resourcesPath -ChildPath "CustomModule\1.1.0.0") -Force -ItemType Directory
+        New-ModuleManifest -Path (Join-Path -Path $resourcesPath -ChildPath "CustomModule\1.1.0.0\CustomModule.psd1") -ModuleVersion "1.1.0.0"
+
         try
         {
             $null = New-Item -Path $compositePath -ItemType Directory -Force
@@ -372,7 +376,10 @@ InModuleScope $ModuleName {
             #Cleanup output by nulling write-Warning
             Mock -CommandName "Write-Warning" -MockWith { }
 
-            Mock -CommandName "Save-Module" -MockWith { New-Item -Path "$script:resourcesPath\$Name\$RequiredVersion" -ItemType Directory }
+            Mock -CommandName "Save-Module" -MockWith { 
+                New-Item -Path "$script:resourcesPath\$Name\$RequiredVersion" -ItemType Directory
+                New-ModuleManifest -Path "$script:resourcesPath\$Name\$RequiredVersion\$Name.psd1" -ModuleVersion $RequiredVersion
+            }
 
             #$script:resourceList = $script:composite.Resources
             
@@ -383,23 +390,23 @@ InModuleScope $ModuleName {
                 param( $ModuleName, $ModuleVersion )
 
                 #CustomModule won't be saved, because it's a custom module, and this module only retrieves resources from public repos
-                if ($ModuleName -eq "CustomModule")
-                {
-                    Test-Path -Path "$resourcesPath\$ModuleName\$ModuleVersion" | Should -Be $false
-                }
-                else
-                {
+                #if ($ModuleName -eq "CustomModule")
+                #{
+                #    Test-Path -Path "$resourcesPath\$ModuleName\$ModuleVersion" | Should -Be $false
+                #}
+                #else
+                #{
                     Test-Path -Path "$resourcesPath\$ModuleName\$ModuleVersion" | Should -Be $true
-                }
+                #}
             }
 
             It "Saves the correct number of unique DSC resources" {
                 
-                #count is the same, despite CoreApps not downloading, because of the compositeResource
-                (Get-ChildItem $resourcesPath).Count | Should -BeExactly ($resourceList.count)
+                #count is + 1, despite CoreApps not downloading, because of the compositeResource & CustomModule
+                (Get-ChildItem $resourcesPath).Count | Should -BeExactly ($resourceList.count + 1)
             }
 
-            It "Warned about CoreApps resource not found" {
+            It "Warned about CustomModule resource not found" {
 
                 Assert-MockCalled -CommandName "Find-Module" -Times 1 -ParameterFilter {$Name -eq "CustomModule"}
                 Assert-MockCalled -CommandName "Write-Warning" -Times 1
@@ -408,19 +415,17 @@ InModuleScope $ModuleName {
             It "Found and saved all Unique public Modules" {
 
                 Assert-MockCalled -CommandName "Find-Module" -Times ($resourceList.count) -Exactly
-                Assert-MockCalled -CommandName "Save-Module" -Times ($resourceList.count - 1) -Exactly
+                Assert-MockCalled -CommandName "Save-Module" -Times ($resourceList.count - 1) -Exactly #Less 1 because CustomModule won't be found
             }
 
-            #Now that the dsc resource directory on the $TestDrive is populated, we can test that the module will
-            #remove the existing resource prior to saving
             It "Removes existing resource directories" {
 
-                #Mocking Save-Module to do nothing allows the function to remove the resource paths without repopulating
+                Mock -CommandName "Remove-Item" -MockWith { }
                 Mock -CommandName "Save-Module" -MockWith { }
                 
                 Save-CompositeDscResourceList -ResourceList $resourceList -DestinationPath $resourcesPath
                 
-                (Get-ChildItem $resourcesPath).Count | Should -BeExactly 1 #the composite resource will be left
+                Assert-MockCalled -CommandName "Remove-Item" -Times 7 -Exactly
             }
 
         }
