@@ -235,13 +235,6 @@ function Get-DscCompositeMetaData
         Write-Verbose "Parsing $resourcePath"
         $parameters = @(Get-PSScriptParameterMetadata -Path $resourcePath)
         $requiredResourceList = @(Get-RequiredDscResourceList -Path $resourcePath)
-
-        $requiredResourceList += $moduleInfo.RequiredModules.foreach({
-            $resourceList += @{
-                ModuleName = $_.Name
-                ModuleVersion = $_.Version.ToString()
-            }
-        })
         
         $compositeValues = @{
             Resource = $resource
@@ -385,12 +378,18 @@ function New-DscResourceList
         $DestinationDriveLetter = "C"
     )
 
+    $requiredModules = ($CompositeResource.Resources.ModuleName.foreach({ Assert-CompositeModule -Path "$DscResourcesPath\$_" })).RequiredModules
+
+    $allResources = $requiredModules.foreach({ @{ ModuleName = $_.Name; ModuleVersion = $_.Version } })
+    
+    $allResources += $CompositeResource.Resources
+
     #Find the unique resources from the list passed in, so we can copy them only the one time :|
-    $uniqueResources = $CompositeResource.Resources | 
+    $uniqueResources = $allResources | 
         Select-Object -Property @{Expression={"$($_.ModuleName.ToLower()):$($_.ModuleVersion)" }}, @{Expression={$_}; Label="Hashtable"} -Unique | 
         Select-Object -ExpandProperty Hashtable
-
-    $resourcesToCopy = $CompositeResource.Resources.ModuleName.foreach({
+    
+    $resourcesToCopy += $uniqueResources.ModuleName.foreach({
         @{
             Path="$DscResourcesPath\$_"
             Destination="${DestinationDriveLetter}:\Program Files\WindowsPowerShell\Modules\$_"
