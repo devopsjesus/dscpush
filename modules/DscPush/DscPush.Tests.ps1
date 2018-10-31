@@ -31,7 +31,7 @@ InModuleScope $ModuleName {
             @{ ModuleName = "xActiveDirectory"            ; ModuleVersion = "2.21.0.0" }
             @{ ModuleName = "CertificateDsc"              ; ModuleVersion = "4.2.0.0"  }
             @{ ModuleName = "xPSDesiredStateConfiguration"; ModuleVersion = "8.4.0.0"  }
-            @{ ModuleName = "CoreApps"                    ; ModuleVersion = "1.1.0.0"  }
+            @{ ModuleName = "CustomModule"                ; ModuleVersion = "1.1.0.0"  }
         )
 
         try
@@ -366,7 +366,7 @@ InModuleScope $ModuleName {
         
         Context "Normal Operations" {
             
-            Mock -CommandName "Find-Module" -MockWith { throw } -ParameterFilter { $Name -eq "CoreApps" }
+            Mock -CommandName "Find-Module" -MockWith { throw } -ParameterFilter { $Name -eq "CustomModule" }
             Mock -CommandName "Find-Module" -MockWith { }
             
             #Cleanup output by nulling write-Warning
@@ -382,8 +382,8 @@ InModuleScope $ModuleName {
                 
                 param( $ModuleName, $ModuleVersion )
 
-                #CoreApps won't be saved, because it's a custom module, and this module only retrieves resources from public repos
-                if ($ModuleName -eq "CoreApps")
+                #CustomModule won't be saved, because it's a custom module, and this module only retrieves resources from public repos
+                if ($ModuleName -eq "CustomModule")
                 {
                     Test-Path -Path "$resourcesPath\$ModuleName\$ModuleVersion" | Should -Be $false
                 }
@@ -401,7 +401,7 @@ InModuleScope $ModuleName {
 
             It "Warned about CoreApps resource not found" {
 
-                Assert-MockCalled -CommandName "Find-Module" -Times 1 -ParameterFilter {$Name -eq "CoreApps"}
+                Assert-MockCalled -CommandName "Find-Module" -Times 1 -ParameterFilter {$Name -eq "CustomModule"}
                 Assert-MockCalled -CommandName "Write-Warning" -Times 1
             }
 

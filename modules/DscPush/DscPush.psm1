@@ -146,19 +146,20 @@ function Get-RequiredDscResourceList
 
     $resourceList = @()
 
-    foreach ($resource in $resourceStatements)
+    foreach ($resource in $resourceStatements.Where({$_.CommandElements[2].Value -ne "PSDesiredStateConfiguration"}))
     { 
         if ($resource.CommandElements.Count -lt 5)
         {
             throw "$Path - Missing ModuleVersion parameter in config."
         }
+
         $resourceList += @{
             ModuleName = $resource.CommandElements[2].Value
             ModuleVersion = $resource.CommandElements[4].Value
         }
     }
 
-    return $resourceList.Where({$_.ModuleName -ne "PSDesiredStateConfiguration"})
+    return $resourceList
 }
 
 <#
@@ -225,7 +226,7 @@ function Get-DscCompositeMetaData
     $moduleInfo = Assert-CompositeModule -Path $Path
     
     $resources = $moduleInfo.ExportedDscResources
-
+    
     $compositeResources = @()
     foreach ($resource in $resources)
     {
@@ -234,6 +235,13 @@ function Get-DscCompositeMetaData
         Write-Verbose "Parsing $resourcePath"
         $parameters = @(Get-PSScriptParameterMetadata -Path $resourcePath)
         $requiredResourceList = @(Get-RequiredDscResourceList -Path $resourcePath)
+
+        $requiredResourceList += $moduleInfo.RequiredModules.foreach({
+            $resourceList += @{
+                ModuleName = $_.Name
+                ModuleVersion = $_.Version.ToString()
+            }
+        })
         
         $compositeValues = @{
             Resource = $resource
@@ -377,6 +385,11 @@ function New-DscResourceList
         $DestinationDriveLetter = "C"
     )
 
+    #Find the unique resources from the list passed in, so we can copy them only the one time :|
+    $uniqueResources = $CompositeResource.Resources | 
+        Select-Object -Property @{Expression={"$($_.ModuleName.ToLower()):$($_.ModuleVersion)" }}, @{Expression={$_}; Label="Hashtable"} -Unique | 
+        Select-Object -ExpandProperty Hashtable
+
     $resourcesToCopy = $CompositeResource.Resources.ModuleName.foreach({
         @{
             Path="$DscResourcesPath\$_"
@@ -387,6 +400,7 @@ function New-DscResourceList
     return $resourcesToCopy
 }
 #endregion tests completed
+
 <#
     .SYNOPSIS
         Initializes the required configuration files necessary to configure DscPush.
