@@ -1,47 +1,136 @@
 ﻿#Requires -Version 5 –Modules Hyper-V -RunAsAdministrator
 
-param(
-    $VhdPath = "C:\Virtualharddisks\win2016core.vhdx",
+<#
+    .SYNOPSIS
+        Use this script to deploy infrastructure using a Node Definition file used by the DscPush module.
 
-    $VSwitchName = "DSC-vSwitch1",
+    .DESCRIPTION
+        This script deploys infrastructure to Hyper-V using the same Node Definition file that DscPush uses to compile and
+        deploy configurations to target nodes. By using the same source of data for both infrastructure and configuration,
+        we can keep all the data in the same location for both infra and config.
+
+    .PARAMETER VhdPath
+        Path to a sysprepped VHDx that will be copied as the target VHDx for the VM (or used a the parent of a differencing 
+        disk if the DifferencingDisk switch is present).
+
+    .PARAMETER VSwitchName
+        Name of the switch to connect the VM. If the switch does not exist, it will be created, so be careful with typos.
+
+    .PARAMETER HostIpAddress
+        IP address assigned to the specified vSwitch.
+        
+    .PARAMETER Credential
+        Typically the local administrator account from your gold image, which you built with WimAuto, right?
+
+    .PARAMETER VmCreationTimeoutSec
+        Specifies the number of seconds to wait until the VM creation workflow times out. Default is 300.
     
-    $HostIpAddress = "192.0.0.247",
+    .PARAMETER AdapterCount
+        Number of adapters to attach to the VM(s). Default is 1.
+
+    .PARAMETER MemoryInGB
+        Amount of memory to assign to the VM(s) - given in GB notation (e.e. "2GB" or "32GB"), but can be passed in as integer.
+        Max is 12TB
+
+    .PARAMETER TargetSubnet
+        IPv4 address representation of the target adapter subnet
+
+    .PARAMETER NodeDefinitionFilePath
+        Path to the Node Definition File used by DscPush module that contains the required data to deploy the configuration.
+
+    .PARAMETER Clobber
+        This switch will delete and rewrite target VM and VHDx
+
+    .PARAMETER DifferencingDisk
+        This switch will designate the VHDx specified by $VhdPath to be the parent disk for the target VM's VHDx.
+
+    .EXAMPLE
+        1. Deploy infrastructure for publishing DSC configurations:
+
+            $deployParams = @{
+                VhdPath                = "C:\VirtualHardDisks\win2016-20181016.vhdx"
+                VSwitchName            = "DSC-vSwitch1"
+                HostIpAddress          = "192.0.0.247"
+                AdapterCount           = 3
+                MemoryInGB             = 4GB
+                TargetSubnet           = "255.255.255.0"
+                NodeDefinitionFilePath = "C:\Library\Deploy\nodeDefinitions\Windows2016BaselineMS.ps1"
+                Clobber                = $true
+                DifferencingDisk       = $true
+            }
+            .\deployVM-HyperV.ps1 @deployParams
+
+
+        2. Deploy infrastructure from a config-injected VHDx:
+
+            $injectParams = @{
+                VhdPath                = "C:\VirtualHardDisks\DscTest.vhdx"
+                VSwitchName            = "DSC-vSwitch1"
+                HostIpAddress          = "192.0.0.247"
+                AdapterCount           = 1
+                MemoryInGB             = 4GB
+                TargetSubnet           = "255.255.255.0"
+                NodeDefinitionFilePath = "C:\Library\Deploy\nodeDefinitions\Windows2016BaselineMS.ps1"
+            }
+            .\deployVM-HyperV.ps1 @injectParams
+
+
+#>
+param(
+    [parameter(mandatory)]
+    [ValidateScript({Test-Path $_})]
+    [string]
+    $VhdPath,
+
+    [parameter(mandatory)]
+    [string]
+    $VSwitchName,
     
-    $DnsServer = "192.0.0.25",
+    [parameter(mandatory)]
+    [ipaddress]
+    $HostIpAddress,
 
 	[parameter(mandatory)]
     [pscredential]
     $Credential,
 
+    [parameter()]
+    [int]
+    $VmCreationTimeoutSec = 300,
+    
+    [parameter()]
+    [int]
     $AdapterCount = 1,
 
-    $TargetSubnet = "255.255.255.0",
+    [parameter()]
+    [ValidateScript({$_ -lt 13194139533313})]
+    [int64]
+    $MemoryInGB,
 
-    [switch]$Clobber = $true,
-
-    [switch]$DifferencingDisks = $true,
+    [parameter(mandatory)]
+    [ipaddress]
+    $TargetSubnet,
     
-    $NodeDefinitionFilePath = "C:\Library\deploy\DSCPushSetup\DefinitionStore\NodeDefinition.ps1"
+    [parameter(mandatory)]
+    [ValidateScript({Test-Path $_})]
+    [string]
+    $NodeDefinitionFilePath,
+    
+    [parameter()]
+    [switch]
+    $Clobber,
+    
+    [parameter()]
+    [switch]
+    $DifferencingDisk
 )
 
 Import-Module Hyper-V
 
-if (!(Get-CimInstance -Namespace root\virtualization\v2 -Class Msvm_VirtualSystemManagementService -ErrorAction Ignore))
+if (! (Get-CimInstance -Namespace root\virtualization\v2 -Class Msvm_VirtualSystemManagementService -ErrorAction Ignore))
 {
     throw "Incorrect version of Hyper-V. Please update to continue"
 }
-
-#Region Ensure paths are valid
-if (! (Test-Path $VhdPath))
-{
-    throw "Could not find Parent VHDX."
-}
-
-if (! (Test-Path $NodeDefinitionFilePath))
-{
-    throw "Could not find Node Definition File."
-}
-#endregion
 
 #region Build the VM configs list
 $nodeDefinition = . $NodeDefinitionFilePath
@@ -49,70 +138,15 @@ $nodeDefinition = . $NodeDefinitionFilePath
 $vmList = $nodeDefinition.Configs.ForEach({
     @{
         TargetItemName = $_.Variables.ComputerName
-        TargetIP       = $_.TargetAdapter.NetworkAddress.IPAddressToString
+        TargetIP       = $_.TargetAdapter.NetworkAddress[0]
         MacAddress     = $_.TargetAdapter.PhysicalAddress
-        VmMemory       = 2048MB
+        VmMemory       = $MemoryInGB
     }
 })
 #endregion
 
-function Set-VmGuestIpAddress
-{
-    param(
-        $VmName,
-
-        $MacAddress,
-
-        $IpAddress,
-		
-		[parameter(mandatory)]
-        $Subnet,
-
-        $Gateway = $HostIpAddress,
-
-        $Dns = $dnsServer
-    )
-    #WMI required throughout this function because CIM functionality is not completely transcribed at this time 12/5/2016
-    $hypervManagement = Get-WmiObject -ClassName 'Msvm_VirtualSystemManagementService' -Namespace 'root\virtualization\v2' 
-
-    $guestVM = Get-WmiObject -ClassName 'Msvm_ComputerSystem' -Namespace 'root\virtualization\v2' -Filter "ElementName='$vmName'"
-
-    $guestVMCim = Get-CimInstance -ClassName 'Msvm_ComputerSystem' -Namespace 'root\virtualization\v2' -Filter "ElementName='$vmName'"
-
-    $hyperVGuestSettings = Get-CimAssociatedInstance -ResultClassName Msvm_VirtualSystemSettingData -InputObject $guestVMCim
-
-    $hyperVGuestEthernetSettings = Get-CimAssociatedInstance -ResultClassName Msvm_SyntheticEthernetPortSettingData -InputObject $hyperVGuestSettings[0]
-
-    #Need a loop because there is no filter option and using a "Where" clause changes object type from cimInstance to List
-    foreach ($nic in $hyperVGuestEthernetSettings)
-    {
-        if ($nic.Address -eq $MacAddress)
-        {
-            $targetNic = $nic
-        }
-    }
-
-    $instance = ($targetnic.instanceid.Split('\'))[1]
-
-    #Need to use WMI here instead of CIM because there's no straightforward way to convert the NIC Config into
-    #text, required by the SetGuestNetworkAdapterConfiguration method.  There is not a comparable CIM method
-    $targetNicConfig = Get-WmiObject -Namespace root\virtualization\v2 -Class 'Msvm_GuestNetworkAdapterConfiguration' -Filter "InstanceID like '%$($instance)'"
-
-    $targetNicConfig.DHCPEnabled = $false
-    $targetNicConfig.IPAddresses = @("$IpAddress")
-    $targetNicConfig.Subnets = @("$Subnet")
-    $targetNicConfig.DefaultGateways = @("$Gateway")
-    $targetNicConfig.DNSServers = @("$Dns")
-    
-    $null = $hypervManagement.SetGuestNetworkAdapterConfiguration($guestVM, $targetNicConfig.GetText(1))
-}
-
 #region TrustedHosts
 #Add the IP list of the target VMs to the trusted host list
-if ((Get-Service "WinRM" -ErrorAction Stop).status -eq 'Stopped') 
-{
-    Start-Service "WinRM" -Confirm:$false -ErrorAction Stop
-}
 $currentTrustedHost = (Get-Item WSMan:\localhost\Client\TrustedHosts).Value
 
 if(($currentTrustedHost -ne '*') -and ([string]::IsNullOrEmpty($currentTrustedHost) -eq $false))
@@ -160,6 +194,8 @@ workflow ConfigureVM
 
         $VHDPath,
 
+        $HostIpAddress,
+
         $VSwitchName,
 
         $Subnet,
@@ -170,7 +206,7 @@ workflow ConfigureVM
 
         [bool]$Clobber,
 
-        [bool]$DifferencingDisks
+        [bool]$DifferencingDisk
 	)
 
     $vhdParentPath = Split-Path -Path $VHDPath -Parent
@@ -195,7 +231,7 @@ workflow ConfigureVM
 	    		    Remove-VM $vmName -Force -ErrorAction Ignore
 			        Remove-Item "$vhdParentPath\$vmName.vhdx" -ErrorAction Ignore
 
-		            if ($DifferencingDisks)
+		            if ($DifferencingDisk)
                     {
                         Write-Output "Creating differencing disk at $vhdParentPath\$vmName.vhdk"
                         $newVHD = New-VHD -Path "$vhdParentPath\$vmName.vhdx" -ParentPath "$VHDPath" -Differencing
@@ -214,7 +250,7 @@ workflow ConfigureVM
             else
             {
                 #create new differencing disks based on the template disk
-		        if ($DifferencingDisks)
+		        if ($DifferencingDisk)
                 {
                     Write-Output "Creating differencing disk at $vhdParentPath\$vmName.vhdk"
                     $newVHD = New-VHD -Path "$vhdParentPath\$vmName.vhdx" -ParentPath "$VHDPath" -Differencing
@@ -226,8 +262,15 @@ workflow ConfigureVM
                 }
             }
         
-            if (!(Get-VM $vmName -ErrorAction Ignore))
+            if (Get-VM $vmName -ErrorAction Ignore)
 		    {
+                if ($VHDPath -notin (Get-VMHardDiskDrive -VMName $vmName).Path)
+                {
+                    throw "Existing VM container with different disk attached"
+                }
+            }
+            else
+            {
                 #Create the new VMs based on the template VHDX
 		        $null = New-VM -Name $vmName -MemoryStartupBytes $VmMemory -VHDPath "$vhdParentPath\$vmName.vhdx" -Generation 2
 
@@ -243,36 +286,87 @@ workflow ConfigureVM
 		    $vmMac = $vmMac.Replace('-','')
 
             Write-Output "Configuring target item $vmName"
-		    while (!($remoteConnectTest))
+		    while (! ($ipSet))
 		    {
-			    sleep 1
-			    Set-VmGuestIpAddress -VmName $vmName -MacAddress $vmMac -IpAddress $vmIp -Subnet $Subnet -ErrorAction Ignore
-                $remoteConnectTest = Test-WSMan $vmIp -ErrorAction Ignore
+			    Start-Sleep 1
+			    Set-VmGuestIpAddress -VmName $vmName -MacAddress $vmMac -IpAddress $vmIp -Subnet $Subnet
+
+                $vmIPList = (Get-VM -Name $vmName | Get-VMNetworkAdapter).IPAddresses
+
+                $ipSet = $vmIP -in $vmIPList
 		    }
 
-            $i = 1
-		    while ($AdapterCount -lt $i)
+            for ($i = 1; $AdapterCount -gt $i; $i++)
             {
                 $null = Add-VMNetworkAdapter -VMName $vmName -SwitchName $VSwitchName
-                $i++
             }
         }
 	}
 }
 
+<# #>
+function Set-VmGuestIpAddress
+{
+    param(
+        $VmName,
+
+        $MacAddress,
+
+        $IpAddress,
+		
+		[parameter(mandatory)]
+        $Subnet,
+
+        $Gateway = $HostIpAddress
+    )
+    #WMI required throughout this function because CIM functionality is not completely transcribed at this time 04/10/2018
+    $hypervManagement = Get-WmiObject -ClassName 'Msvm_VirtualSystemManagementService' -Namespace 'root\virtualization\v2' 
+
+    $guestVM = Get-WmiObject -ClassName 'Msvm_ComputerSystem' -Namespace 'root\virtualization\v2' -Filter "ElementName='$vmName'"
+
+    $guestVMCim = Get-CimInstance -ClassName 'Msvm_ComputerSystem' -Namespace 'root\virtualization\v2' -Filter "ElementName='$vmName'"
+
+    $hyperVGuestSettings = Get-CimAssociatedInstance -ResultClassName Msvm_VirtualSystemSettingData -InputObject $guestVMCim
+
+    $hyperVGuestEthernetSettings = Get-CimAssociatedInstance -ResultClassName Msvm_SyntheticEthernetPortSettingData -InputObject $hyperVGuestSettings[0]
+
+    #Need a loop because there is no filter option and using a "Where" clause changes object type from cimInstance to List
+    foreach ($nic in $hyperVGuestEthernetSettings)
+    {
+        if ($nic.Address -eq $MacAddress)
+        {
+            $targetNic = $nic
+        }
+    }
+
+    $instance = ($targetnic.instanceid.Split('\'))[1]
+
+    #Need to use WMI here instead of CIM because there's no straightforward way to convert the NIC Config into
+    #text, required by the SetGuestNetworkAdapterConfiguration method.  There is not a comparable CIM method
+    $targetNicConfig = Get-WmiObject -Namespace root\virtualization\v2 -Class 'Msvm_GuestNetworkAdapterConfiguration' -Filter "InstanceID like '%$($instance)'"
+
+    $targetNicConfig.DHCPEnabled = $false
+    $targetNicConfig.IPAddresses = @("$IpAddress")
+    $targetNicConfig.Subnets = @("$Subnet")
+    $targetNicConfig.DefaultGateways = @("$Gateway")
+    
+    $null = $hypervManagement.SetGuestNetworkAdapterConfiguration($guestVM, $targetNicConfig.GetText(1))
+}
+
 try
 {
     $vmConfig = @{
-        VmList            = $vmList
-        VHDPath           = $VhdPath
-        VSwitchName       = $VSwitchName
-        Subnet            = $TargetSubnet
-        AdapterCount      = $AdapterCount
-        RemoteCred        = $Credential
-        Clobber           = $Clobber
-        DifferencingDisks = $DifferencingDisks
+        VmList              = $vmList
+        HostIPAddress       = $HostIpAddress
+        VHDPath             = $VhdPath
+        VSwitchName         = $VSwitchName
+        Subnet              = $TargetSubnet
+        AdapterCount        = $AdapterCount
+        RemoteCred          = $Credential
+        Clobber             = $Clobber
+        DifferencingDisk    = $DifferencingDisk
+        PSElapsedTimeoutSec = $VmCreationTimeoutSec
     }
-
     ConfigureVM @vmConfig
 }
 finally

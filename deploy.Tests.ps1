@@ -10,11 +10,11 @@
         The administrator credential for your image.
 
     .Parameter vmNetworkAddressList
-        The IP addresses of the VMs you built.  Hopefully with code...
+        A string array of IP addresses of the VMs you built.  Hopefully with code...
 
     .EXAMPLE
         $credential = get-credential administrator
-        .\deployButton.Tests.ps1 -Credential $credential -VmNetworkAddressList @("192.0.0.30")
+        .\deploy.Tests.ps1 -Credential $credential -VmNetworkAddressList @("192.0.0.30")
 #>
 param(
     [Parameter(Mandatory)]
@@ -30,6 +30,7 @@ Describe "DscPush Deployment" {
     Context "VM DSC State" {
         
         #region Prepare for test
+        Write-Output "Attempting to create session and stop any DSC operation in process."
         $cimSessions = New-CimSession -ComputerName $VmNetworkAddressList -Credential $Credential
         Stop-DscConfiguration -CimSession $cimSessions -WarningAction Ignore
         #endregion

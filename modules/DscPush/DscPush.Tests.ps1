@@ -577,7 +577,7 @@ InModuleScope $ModuleName {
 
             $params = @{
                 CompositeResource      = $script:composite
-                DscResourcesPath       = $script:resourcesPath
+                DscResourcesDirectory       = $script:resourcesPath
                 DestinationDriveLetter = "Q"
             }
             $resourceFileList = New-DscResourceList @params
