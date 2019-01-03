@@ -80,7 +80,8 @@ $directorySettings = @{
 }
 
 #Remove and reimport module to allow for changes made during development
-Get-Module DscPush -ErrorAction SilentlyContinue | Remove-Module
+$dscpushModule = Get-Module DscPush -ErrorAction SilentlyContinue
+Remove-Module $dscpushModule
 Import-Module -FullyQualifiedName $directorySettings.DSCPushModulePath -ErrorAction Stop
 $directorySettings.Remove("DscPushModulePath")
 
@@ -92,4 +93,3 @@ $configInjectionParams = @{
     TargetLcmSettings      = $targetLCMSettings
 } + $directorySettings
 Add-ConfigurationToVHDx @configInjectionParams
-    

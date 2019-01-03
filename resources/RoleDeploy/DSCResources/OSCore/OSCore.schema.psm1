@@ -39,7 +39,6 @@ $ConfigData = @{
 }
 
 $null = OSCore -OutputPath $OutPutPath -ConfigurationData $ConfigData
-
 #>
 Configuration OSCore 
 { 
@@ -66,10 +65,11 @@ Configuration OSCore
         $JoinDomain
     )
 
-    Import-DscResource –ModuleName "PSDesiredStateConfiguration" -ModuleVersion 1.1
+    Import-DscResource -ModuleName "PSDesiredStateConfiguration" -ModuleVersion 1.1
     Import-DscResource -ModuleName "xNetworking" -ModuleVersion 5.7.0.0
     Import-DscResource -ModuleName "xComputerManagement" -ModuleVersion 4.1.0.0
-
+    Import-DscResource -ModuleName "xPSDesiredStateConfiguration" -ModuleVersion 8.3.0.0
+    
     #Collate Domain Join Partial object Dependencies
     $domainJoinDependsOn = @()
 
@@ -96,8 +96,6 @@ Configuration OSCore
             Write-Verbose "Could not connect to remote machine to get alias, assuming 'Ethernet'"
             $interfaceAlias = "Ethernet"
         }
-        
-        
     }
     <#uncomment if you want to confirm the interface alias is correct, but otherwise, this call is unnecessary
     else
@@ -166,7 +164,7 @@ Configuration OSCore
         {
             Name = $ComputerName
             DomainName = $DomainName
-            Credential = $(New-Object System.Management.Automation.PSCredential("$DomainName\$($DomainCredential.UserName)", $DomainCredential.Password))
+            Credential = $DomainCredential
             DependsOn = $domainJoinDependsOn
         }
     }

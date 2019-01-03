@@ -1,4 +1,4 @@
-Configuration Windows2016Baseline
+﻿Configuration Windows2016BaselineDC
 {
     Import-DscResource -ModuleName RoleDeploy -ModuleVersion 1.0.0.0
 
@@ -10,6 +10,14 @@ Configuration Windows2016Baseline
             DomainName       = $Node.DomainName
             DomainCredential = $Node.DomainCredential
             JoinDomain       = $Node.JoinDomain
+        }
+
+        DomainController Install
+        {
+            ComputerName     = $Node.ComputerName
+            DomainName       = $Node.DomainName
+            DomainCredential = $Node.DomainCredential
+            DependsOn        = "[OSCore]Deploy"
         }
     }
 }

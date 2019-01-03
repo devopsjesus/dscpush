@@ -8,8 +8,6 @@ $ModuleRoot = $PSScriptRoot
 $ModulePath = $MyInvocation.MyCommand.Path -replace '\.Tests\.ps1$','.psm1'
 $ModuleName = Split-Path -Path $ModuleRoot -Leaf
 
-#$compositeResourceName = "RoleDeploy"
-
 Get-Module $ModuleName -ErrorAction SilentlyContinue | Remove-Module
 Import-Module -FullyQualifiedName $ModulePath -ErrorAction Stop
 
@@ -35,7 +33,7 @@ InModuleScope $ModuleName {
         )
 
         #Create the CustomModule ahead of time, because those files would already exist
-        New-Item -Path (Join-Path -Path $resourcesPath -ChildPath "CustomModule\1.1.0.0") -Force -ItemType Directory
+        $null = New-Item -Path (Join-Path -Path $resourcesPath -ChildPath "CustomModule\1.1.0.0") -Force -ItemType Directory
         New-ModuleManifest -Path (Join-Path -Path $resourcesPath -ChildPath "CustomModule\1.1.0.0\CustomModule.psd1") -ModuleVersion "1.1.0.0"
 
         try

@@ -23,7 +23,7 @@
         Typically the local administrator account from your gold image, which you built with WimAuto, right?
 
     .PARAMETER VmCreationTimeoutSec
-        Specifies the number of seconds to wait until the VM creation workflow times out. Default is 300.
+        Specifies the number of seconds to wait until the VM creation workflow times out. Default is 600.
     
     .PARAMETER AdapterCount
         Number of adapters to attach to the VM(s). Default is 1.
@@ -36,7 +36,7 @@
         IPv4 address representation of the target adapter subnet
 
     .PARAMETER NodeDefinitionFilePath
-        Path to the Node Definition File used by DscPush module that contains the required data to deploy the configuration.
+        Path to the Node Definition File used by DscPush module that contains the required data to configure the VMs.
 
     .PARAMETER Clobber
         This switch will delete and rewrite target VM and VHDx
@@ -48,13 +48,13 @@
         1. Deploy infrastructure for publishing DSC configurations:
 
             $deployParams = @{
-                VhdPath                = "C:\VirtualHardDisks\win2016-20181016.vhdx"
+                VhdPath                = "C:\VirtualHardDisks\WindowsServer2016-2-20190102.vhdx"
                 VSwitchName            = "DSC-vSwitch1"
                 HostIpAddress          = "192.0.0.247"
-                AdapterCount           = 3
-                MemoryInGB             = 4GB
+                AdapterCount           = 1
+                MemoryInGB             = 2GB
                 TargetSubnet           = "255.255.255.0"
-                NodeDefinitionFilePath = "C:\Library\Deploy\nodeDefinitions\Windows2016BaselineMS.ps1"
+                NodeDefinitionFilePath = "C:\DscPushTest\nodeDefinitions\WindowsServerStandalone.ps1"
                 Clobber                = $true
                 DifferencingDisk       = $true
             }
@@ -68,9 +68,9 @@
                 VSwitchName            = "DSC-vSwitch1"
                 HostIpAddress          = "192.0.0.247"
                 AdapterCount           = 1
-                MemoryInGB             = 4GB
+                MemoryInGB             = 3GB
                 TargetSubnet           = "255.255.255.0"
-                NodeDefinitionFilePath = "C:\Library\Deploy\nodeDefinitions\Windows2016BaselineMS.ps1"
+                NodeDefinitionFilePath = "C:\DscPushTest\nodeDefinitions\Windows2016Baseline.ps1"
             }
             .\deployVM-HyperV.ps1 @injectParams
 
@@ -96,7 +96,7 @@ param(
 
     [parameter()]
     [int]
-    $VmCreationTimeoutSec = 300,
+    $VmCreationTimeoutSec = 600,
     
     [parameter()]
     [int]
@@ -264,7 +264,7 @@ workflow ConfigureVM
         
             if (Get-VM $vmName -ErrorAction Ignore)
 		    {
-                if ($VHDPath -notin (Get-VMHardDiskDrive -VMName $vmName).Path)
+                if ("$vhdParentPath\$vmName.vhdx" -notin (Get-VMHardDiskDrive -VMName $vmName).Path)
                 {
                     throw "Existing VM container with different disk attached"
                 }

@@ -1,4 +1,4 @@
-Configuration Windows2016Baseline
+﻿Configuration Windows2016Baseline
 {
     Import-DscResource -ModuleName RoleDeploy -ModuleVersion 1.0.0.0
 
@@ -10,6 +10,13 @@ Configuration Windows2016Baseline
             DomainName       = $Node.DomainName
             DomainCredential = $Node.DomainCredential
             JoinDomain       = $Node.JoinDomain
+        }
+
+        SetWSUS LabWSUS
+        {
+            WsusServerIP    = $Node.WsusServerIP
+            WsusTargetGroup = $Node.WsusTargetGroup
+            DependsOn       = "[OSCore]Deploy"
         }
     }
 }

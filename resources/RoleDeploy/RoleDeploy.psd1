@@ -52,7 +52,7 @@ CLRVersion = '4.0'
 # Modules that must be imported into the global environment prior to importing this module
     RequiredModules = @(
         @{ModuleName = 'xPSDesiredStateConfiguration'; ModuleVersion = '8.4.0.0'}
-        @{ModuleName = 'xActiveDirectory'; ModuleVersion = '2.21.0.0'}
+        @{ModuleName = 'xActiveDirectory'; ModuleVersion = '2.22.0.0'}
         @{ModuleName = 'xDnsServer'; ModuleVersion = '1.11.0.0'}
         @{ModuleName = 'xNetworking'; ModuleVersion = '5.7.0.0'}
         @{ModuleName = 'xComputerManagement'; ModuleVersion = '4.1.0.0'}
@@ -71,7 +71,7 @@ VariablesToExport = '*'
 AliasesToExport = @()
 
 # DSC resources to export from this module
-DscResourcesToExport = @('OSCore','DomainController')
+DscResourcesToExport = @('OSCore','DomainController','SetWSUS')
 
 # Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
 PrivateData = @{

@@ -10,11 +10,11 @@
         The administrator credential for your image.
 
     .Parameter vmNetworkAddressList
-        A string array of IP addresses of the VMs you built.  Hopefully with code...
+        A string array of IP addresses of the VMs you built. Hopefully with code...
 
     .EXAMPLE
         $credential = get-credential administrator
-        .\deploy.Tests.ps1 -Credential $credential -VmNetworkAddressList @("192.0.0.30")
+        .\deploy.Tests.ps1 -Credential $credential -VmNetworkAddressList @("192.0.0.31")
 #>
 param(
     [Parameter(Mandatory)]

@@ -1,6 +1,6 @@
 <#
     .SYNOPSIS
-        A composite DSC resource to deploy core OS functionality.
+        A composite DSC resource to deploy DC functionality.
 #>
 Configuration DomainController
 {
@@ -24,7 +24,7 @@ Configuration DomainController
     )
 
     Import-DscResource -ModuleName 'PSDesiredStateConfiguration' -ModuleVersion 1.1
-    Import-DscResource -ModuleName 'xActiveDirectory' -ModuleVersion 2.21.0.0
+    Import-DscResource -ModuleName 'xActiveDirectory' -ModuleVersion 2.22.0.0
     Import-DscResource -ModuleName 'xDnsServer' -ModuleVersion 1.11.0.0
 
     WindowsFeature ADDSInstall 
@@ -38,7 +38,6 @@ Configuration DomainController
         DomainName = $DomainName 
         DomainAdministratorCredential = $DomainCredential
         SafemodeAdministratorPassword = $DomainCredential
-        DomainNetbiosName = $DomainName.Split(".")[0]
         DependsOn = "[WindowsFeature]ADDSInstall"
     }
 
