@@ -1,11 +1,50 @@
 # Introduction
 
-DscPush is a DSC Configuration management framework. It consists of a module (DscPush directory) and supporting resources (DscPushSetup directory). Copy the module directory to your PowerShell Module Path (e.g. "$env:USERPROFILE\Documents\WindowsPowerShell\Modules"), and copy the DscPushSetup folder to your workspace.
+DscPush is a class-based Desired State Configuration (DSC) management framework primarily contained in a single module. It is written entirely in PowerShell, and there are no external dependencies (SQL, IIS, DLLs, etc).  
+
+# Features
+- Configuration data for any collection of target nodes is stored in and referenced from a single custom data file
+  - Called a "NodeDefinition" script
+  - Outputs custom-typed objects when executed
+  - Contains all the data values to satisfy Node configuration
+  - Includes target Node network configuration information
+    - Same network information is used to [generate and configure Hyper-V VMs](https://github.com/devopsjesus/dscpush/blob/compositeResources/deployVM-HyperV.ps1)
+- Secure Sensitive information
+  - Passwords can be stored securely using generated AES256 key
+  - MOF Encryption
+    - Built-in components generate or publish information encryption certificates to secure MOF files
+      - Share a PK from the authoring Node, or generate the PK on the target Node
+- Configure LCM settings from the authoring node
+- A "Deployment Composite Resource Module" (called RoleDeploy) stores deployable "Roles" as custom composite resources
+  - "Roles" - just like usual composite resources - contain all the resources necessary to deploy an application or collection of settings to the target Node
+  - Allows for the flexibility of deploying partial configurations without their limitations
+  - Roles should be owned by their product teams
+  - Formalizes and organizes required modules and resources for all the composite resources in a single module
+- Downloads all required modules and resource modules dynamically
+  - Scans the RoleDeploy module for instances of `Import-DscResource`
+    - `ModuleVersion` Parameter is considered a required Parameter for all instances of the `Import-DscResource` CmdLet
+    - Does not support use of importing single resources using the `Name` Parameter
+    - E.g. `Import-DscResource -ModuleName RoleDeploy -ModuleVersion 1.0.0.0`
+  - Compares the generated list to the RequiredModules array in the RoleDeploy module manifest and reports discrepencies
+  - Activated by using the `SeedDscResources` switch from the [deploy script](https://github.com/devopsjesus/dscpush/blob/compositeResources/deploy.ps1)
+  - Can optionally scan the `PsModulePath` for any instances of required modules and removes them
+    - Actived by using the `SanitizeModulePaths` switch
+- Copies all required supporting files to the target Node
+  - Copies DSC Resource Modules and the contents of a "ContentStore" directory to the target Node
+    - These operations can be specified separately
+    - This allows for speedier development by optionally turning off the ContentStore copy, which can be time consuming with large amounts of files
+    - The destination of the ContentStore on the target is specified in the NodeDefinition file
+  - Attempts to enable and use SMB3 - via PSDrive on the target Node
+    - Opens firewall ports automatically
+    - Falls back on copying files over PsSession if PSDrive cannot be established
+    
+  
+    
 
 # Requirements
 
 * DscPush was written on WMF5.1
-* Ability to establish CimSessions/PSSessions to target device.
+* Ability to establish CimSessions/PSSessions to target node
 
 
 # Concept of Operations
