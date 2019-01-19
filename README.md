@@ -7,9 +7,12 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
 - Configuration data for any collection of target nodes is stored in and referenced from a single custom data file
 - Called a "NodeDefinition" script
 - Outputs custom-typed objects when executed
+- Since the data file is also a script it allows for storing PS objects in object properties (not easily done in XML or JSON data files)
 - Contains all the data values to satisfy Node configuration
 - Includes target Node network configuration information
   - Same network information is used to [generate and configure Hyper-V VMs](https://github.com/devopsjesus/dscpush/blob/compositeResources/deployVM-HyperV.ps1)
+  - Target adapters can be identified by either MAC/Physical Address or Alias
+    - If both values are specified, MAC addresses are checked first
 
 ## Secure Sensitive information
 - Passwords can be stored securely using generated AES256 key
@@ -60,14 +63,20 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
     - Falls back on copying files over PsSession if PSDrive cannot be established
 - Network connectivity to target Node is tested before attempting to establish any network communications
   - If the connection test fails, the Node is skipped and the deployment continues with the next Node
+  - Validates the MAC/Physical address from the NodeDefinition file matches the Adapter on the target Node
+- A single set of Cim/PsSessions for each target Node is maintained across the entire deployment process
+- Configures the WSMAN TrustedHosts property on the authoring Node to allow communications with target Nodes securely
+  - Target IP addresses are added before deployment and removed afterwards to reduce attack vector
+  - IP addresses are used primarily for deployment in greenfield scenarios
+    - Removes the requirement for DNS services
+- Configure LCM settings from the authoring node
+  - Currently all nodes in a NodeDefinition file will receive the same LCM settings
+    - **TODO**: Move the LCM settings from the deployment script to the TargetNode class
 
 ## Configuration Management
 - Can compile configurations separately from publishing
   - Allows for reuse of configurations for repeatable deployments
   - Can be shipped to production for immediate publishing
-- Configure LCM settings from the authoring node
-  - Currently all nodes in a NodeDefinition file will receive the same LCM settings
-    - **TODO**: Move the LCM settings from the deployment script to the TargetNode class
 - Target Node Configuration is listed in the `RoleList` property of the TargetNode object
   - `RoleList` values are checked against configuration names in scripts stored in the directory specified in the `ConfigurationDirectory` Parameter of the deploy script
   - Configurations are currently a collection of Roles from the RoleDeploy module
@@ -77,7 +86,11 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
       - **TODO**: Change this behavior to alternatively reference roles from the RoleDeploy module in the RoleList property and dynamically generate the Configuration
         - This would remove the requirement to store static configurations and update them when Roles are updated
         - This would force all deployment resources to be formalized in the RoleDeploy module, which I think is preferable
-
+- Sends `Stop-DscConfiguration` and waits for target Node LCM to return Idle or Pending before deployment
+  - The `-Force` is not used by any DSC CmdLet, as it tends to cause issues
+- Able to reset the LCM to default settings using the `Reset-TargetLCM` function
+- Able to inject configurations and supporting resources and files into a specified VHDx for repeateable image deployment (DSC Bootstrapping)
+  
 
 # Requirements
 
