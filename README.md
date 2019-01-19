@@ -14,8 +14,13 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
 ## Secure Sensitive information
 - Passwords can be stored securely using generated AES256 key
 - MOF Encryption
-  - Built-in components generate or publish information encryption certificates to secure MOF files
-    - Share a PK from the authoring Node, or generate the PK on the target Node
+  - Two methods
+    - Share a pre-existing certificate from the authoring Node to all target Nodes
+      - Requires sharing the private key to all nodes, which means if the password were compromised, all nodes would be compromised
+    - Generate the certificate on the target Node
+      - The public key is copied to the authoring Node, while each Node will generate and store its own private key
+      - Activated with the GenerateMofEncryptionCert switch from the [deploy script](https://github.com/devopsjesus/dscpush/blob/compositeResources/deploy.ps1)
+    - Activated with the EnableTargetMofEncryption switch
 
 ## Deploy "Roles" to Target Nodes
 - A "Deployment Composite Resource Module" (called RoleDeploy) stores deployable "Roles" as custom composite resources
@@ -35,26 +40,43 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
 - Can optionally scan the `PsModulePath` for any instances of required modules and removes them
   - Actived by using the `SanitizeModulePaths` switch
 
-## Remote Content Copy
-- Copies all required supporting files to the target Node
-- Copies DSC Resource Modules and the contents of a "ContentStore" directory to the target Node
-  - These operations can be specified separately
-  - This allows for speedier development by optionally turning off the ContentStore copy, which can be time consuming with large amounts of files
-- ContentStore information is stored in the NodeDefinition file
-  - If a Node is marked as a ContentHost, the ContentStore directory is copied to the target
-    - In this case, file paths referenced in the Variables property of the TargetNode should all be local paths
-  - If a Node is not marked as a ContentHost, the ContentStore directory is not copied to the target
-    - In this case, the ContentStorePath property of that TargetNode should be a UNC path to a Node that is marked as a ContentHost
-    - Composite Resources published to Nodes not marked as a ContentHost will typically need to check for UNC paths passed in and copy remote files locally using the File resource
-    - This method removes the burden of file copy batches to target Nodes from the authoring Node
-      - Speeds up development, testing, and deployment
-      - Also allows for more granular management of the resources' required files
-- Attempts to enable and use SMB3 - via PSDrive on the target Node
-  - Opens firewall ports automatically
-  - Falls back on copying files over PsSession if PSDrive cannot be established
+## Target Node Management
+- Remote Content Copy Batches
+  - Copies all required supporting files to the target Node
+  - Copies DSC Resource Modules and the contents of a "ContentStore" directory to the target Node
+    - These operations can be specified separately
+    - This allows for speedier development by optionally turning off the ContentStore copy, which can be time consuming with large amounts of files
+  - ContentStore information is stored in the NodeDefinition file
+    - If a Node is marked as a ContentHost, the ContentStore directory is copied to the target
+      - In this case, file paths referenced in the Variables property of the TargetNode should all be local paths
+    - If a Node is not marked as a ContentHost, the ContentStore directory is not copied to the target
+      - In this case, the ContentStorePath property of that TargetNode should be a UNC path to a Node that is marked as a ContentHost
+      - Composite Resources published to Nodes not marked as a ContentHost will typically need to check for UNC paths passed in and copy remote files locally using the File resource
+      - This method removes the burden of file copy batches to target Nodes from the authoring Node
+        - Speeds up development, testing, and deployment
+        - Also allows for more granular management of the resources' required files
+  - Attempts to enable and use SMB3 - via PSDrive on the target Node
+    - Opens firewall ports automatically
+    - Falls back on copying files over PsSession if PSDrive cannot be established
+- Network connectivity to target Node is tested before attempting to establish any network communications
+  - If the connection test fails, the Node is skipped and the deployment continues with the next Node
 
-## But wait! There's more...
+## Configuration Management
+- Can compile configurations separately from publishing
+  - Allows for reuse of configurations for repeatable deployments
+  - Can be shipped to production for immediate publishing
 - Configure LCM settings from the authoring node
+  - Currently all nodes in a NodeDefinition file will receive the same LCM settings
+    - **TODO**: Move the LCM settings from the deployment script to the TargetNode class
+- Target Node Configuration is listed in the `RoleList` property of the TargetNode object
+  - `RoleList` values are checked against configuration names in scripts stored in the directory specified in the `ConfigurationDirectory` Parameter of the deploy script
+  - Configurations are currently a collection of Roles from the RoleDeploy module
+    - Resource property values here simply reference the $Node variable key with that property name
+      - E.g. `ComputerName = $Node.ComputerName`
+    - Using this method, Configurations can be stored and referenced statically
+      - **TODO**: Change this behavior to alternatively reference roles from the RoleDeploy module in the RoleList property and dynamically generate the Configuration
+        - This would remove the requirement to store static configurations and update them when Roles are updated
+        - This would force all deployment resources to be formalized in the RoleDeploy module, which I think is preferable
 
 
 # Requirements
