@@ -5,6 +5,8 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
 ## Requirements
 - DscPush was written for WMF 5.1
 - Ability to establish CimSessions/PSSessions to target Node
+- If using the DeployVM-HyperV.ps1 script, the Hyper-V role must be enabled on the authoring Node
+- A sysprepped VHDx is required to deploy VMs automatedly
 
 
 # Features
@@ -140,8 +142,42 @@ Much of the documentation for the module itself is contained in the comment-base
     - Script to generate Hyper-V VMs from NodeDefinition files  
 
 ## General Process Flow
-1. 
 
+### Deploy Single Node
+1. Clone repository and copy to workspace directory (E.g. "C:\deploy")
+2. Run PowerShell as admin (alternatively, open each script below in your favorite editor and run in debug mode)
+3. Execute the `DeployVM-HyperV.ps1` script to deploy a standalone VM
+  1. Update any parameter values as necessary (such as VhdPath & Credential) before running
+  2. This script will create a Hyper-V switch with a specified IP address
+  3. The example below is set to create a differencing disk with the parent VHDx as the specified VhdPath
+  4. The exmpale below will remove any VM and VHDx with the same name before deployment
+  5. If a credential was not passed in, you will need to enter the credential upon executing the script
+    - This is the credential of a local administrator for the VHDx referenced
+```
+$deployParams = @{
+    VhdPath                = "C:\VirtualHardDisks\win2016core-20180924.vhdx"
+    VSwitchName            = "DSC-vSwitch1"
+    HostIpAddress          = "192.0.0.247"
+    AdapterCount           = 1
+    MemoryInGB             = 2GB
+    TargetSubnet           = "255.255.255.0"
+    NodeDefinitionFilePath = "C:\deploy\nodeDefinitions\WindowsServerStandalone.ps1"
+    Clobber                = $true
+    DifferencingDisk       = $true
+}
+C:\deploy\deployVM-HyperV.ps1 @deployParams
+```
+4. Execute the `deploy.ps1` script to publish the TargetConfig in the NodeDefinition file to the target Node
+  1. notes
+```
+$params = @{
+    WorkspacePath             = "C:\deploy"
+    CompositeResourcePath     = "C:\deploy\resources\RoleDeploy"
+    NodeDefinitionFilePath    = "C:\deploy\nodeDefinitions\WindowsServerStandalone.ps1"
+    EnableTargetMofEncryption = $true
+    GenerateMofEncryptionCert = $true
+}
+```
 
 # Lexicon
 
