@@ -3,43 +3,59 @@
 DscPush is a class-based Desired State Configuration (DSC) management framework primarily contained in a single module. It is written entirely in PowerShell, and there are no external dependencies (SQL, IIS, DLLs, etc).  
 
 # Features
+## Single Configuration Data File
 - Configuration data for any collection of target nodes is stored in and referenced from a single custom data file
-  - Called a "NodeDefinition" script
-  - Outputs custom-typed objects when executed
-  - Contains all the data values to satisfy Node configuration
-  - Includes target Node network configuration information
-    - Same network information is used to [generate and configure Hyper-V VMs](https://github.com/devopsjesus/dscpush/blob/compositeResources/deployVM-HyperV.ps1)
-- Secure Sensitive information
-  - Passwords can be stored securely using generated AES256 key
-  - MOF Encryption
-    - Built-in components generate or publish information encryption certificates to secure MOF files
-      - Share a PK from the authoring Node, or generate the PK on the target Node
-- Configure LCM settings from the authoring node
+- Called a "NodeDefinition" script
+- Outputs custom-typed objects when executed
+- Contains all the data values to satisfy Node configuration
+- Includes target Node network configuration information
+  - Same network information is used to [generate and configure Hyper-V VMs](https://github.com/devopsjesus/dscpush/blob/compositeResources/deployVM-HyperV.ps1)
+
+## Secure Sensitive information
+- Passwords can be stored securely using generated AES256 key
+- MOF Encryption
+  - Built-in components generate or publish information encryption certificates to secure MOF files
+    - Share a PK from the authoring Node, or generate the PK on the target Node
+
+## Deploy "Roles" to Target Nodes
 - A "Deployment Composite Resource Module" (called RoleDeploy) stores deployable "Roles" as custom composite resources
-  - "Roles" - just like usual composite resources - contain all the resources necessary to deploy an application or collection of settings to the target Node
-  - Allows for the flexibility of deploying partial configurations without their limitations
-  - Roles should be owned by their product teams
-  - Formalizes and organizes required modules and resources for all the composite resources in a single module
+- "Roles" - just like usual composite resources - contain all the resources necessary to deploy an application or collection of settings to the target Node
+- Allows for the flexibility of deploying partial configurations without their limitations
+- Roles should be owned by their product teams
+- Formalizes and organizes required modules and resources for all the composite resources in a single module
+
+## Module and Resource Management
 - Downloads all required modules and resource modules dynamically
-  - Scans the RoleDeploy module for instances of `Import-DscResource`
-    - `ModuleVersion` Parameter is considered a required Parameter for all instances of the `Import-DscResource` CmdLet
-    - Does not support use of importing single resources using the `Name` Parameter
-    - E.g. `Import-DscResource -ModuleName RoleDeploy -ModuleVersion 1.0.0.0`
-  - Compares the generated list to the RequiredModules array in the RoleDeploy module manifest and reports discrepencies
-  - Activated by using the `SeedDscResources` switch from the [deploy script](https://github.com/devopsjesus/dscpush/blob/compositeResources/deploy.ps1)
-  - Can optionally scan the `PsModulePath` for any instances of required modules and removes them
-    - Actived by using the `SanitizeModulePaths` switch
+- Scans the RoleDeploy module for instances of `Import-DscResource`
+  - `ModuleVersion` Parameter is considered a required Parameter for all instances of the `Import-DscResource` CmdLet
+  - Does not support use of importing single resources using the `Name` Parameter
+  - E.g. `Import-DscResource -ModuleName RoleDeploy -ModuleVersion 1.0.0.0`
+- Compares the generated list to the RequiredModules array in the RoleDeploy module manifest and reports discrepencies
+- Activated by using the `SeedDscResources` switch from the [deploy script](https://github.com/devopsjesus/dscpush/blob/compositeResources/deploy.ps1)
+- Can optionally scan the `PsModulePath` for any instances of required modules and removes them
+  - Actived by using the `SanitizeModulePaths` switch
+
+## Remote Content Copy
 - Copies all required supporting files to the target Node
-  - Copies DSC Resource Modules and the contents of a "ContentStore" directory to the target Node
-    - These operations can be specified separately
-    - This allows for speedier development by optionally turning off the ContentStore copy, which can be time consuming with large amounts of files
-    - The destination of the ContentStore on the target is specified in the NodeDefinition file
-  - Attempts to enable and use SMB3 - via PSDrive on the target Node
-    - Opens firewall ports automatically
-    - Falls back on copying files over PsSession if PSDrive cannot be established
-    
-  
-    
+- Copies DSC Resource Modules and the contents of a "ContentStore" directory to the target Node
+  - These operations can be specified separately
+  - This allows for speedier development by optionally turning off the ContentStore copy, which can be time consuming with large amounts of files
+- ContentStore information is stored in the NodeDefinition file
+  - If a Node is marked as a ContentHost, the ContentStore directory is copied to the target
+    - In this case, file paths referenced in the Variables property of the TargetNode should all be local paths
+  - If a Node is not marked as a ContentHost, the ContentStore directory is not copied to the target
+    - In this case, the ContentStorePath property of that TargetNode should be a UNC path to a Node that is marked as a ContentHost
+    - Composite Resources published to Nodes not marked as a ContentHost will typically need to check for UNC paths passed in and copy remote files locally using the File resource
+    - This method removes the burden of file copy batches to target Nodes from the authoring Node
+      - Speeds up development, testing, and deployment
+      - Also allows for more granular management of the resources' required files
+- Attempts to enable and use SMB3 - via PSDrive on the target Node
+  - Opens firewall ports automatically
+  - Falls back on copying files over PsSession if PSDrive cannot be established
+
+## But wait! There's more...
+- Configure LCM settings from the authoring node
+
 
 # Requirements
 
