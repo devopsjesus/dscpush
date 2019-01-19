@@ -2,7 +2,14 @@
 
 DscPush is a class-based Desired State Configuration (DSC) management framework primarily contained in a single module. It is written entirely in PowerShell, and there are no external dependencies (SQL, IIS, DLLs, etc).  
 
+## Requirements
+- DscPush was written for WMF 5.1
+- Ability to establish CimSessions/PSSessions to target Node
+
+
 # Features
+DsCPush provides a near-complete set of features to complie and publish DSC configurations to target Nodes.  Any missing features can be requested by submitting an Issue.  Below are some of the highlighted capabilities of the module.
+
 ## Single Configuration Data File
 - Configuration data for any collection of target nodes is stored in and referenced from a single custom data file
 - Called a "NodeDefinition" script
@@ -72,6 +79,7 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
 - Configure LCM settings from the authoring node
   - Currently all nodes in a NodeDefinition file will receive the same LCM settings
     - **TODO**: Move the LCM settings from the deployment script to the TargetNode class
+  - Able to reset the LCM to default settings using the `Reset-TargetLCM` function
 
 ## Configuration Management
 - Can compile configurations separately from publishing
@@ -88,66 +96,51 @@ DscPush is a class-based Desired State Configuration (DSC) management framework 
         - This would force all deployment resources to be formalized in the RoleDeploy module, which I think is preferable
 - Sends `Stop-DscConfiguration` and waits for target Node LCM to return Idle or Pending before deployment
   - The `-Force` is not used by any DSC CmdLet, as it tends to cause issues
-- Able to reset the LCM to default settings using the `Reset-TargetLCM` function
 - Able to inject configurations and supporting resources and files into a specified VHDx for repeateable image deployment (DSC Bootstrapping)
-  
-
-# Requirements
-
-* DscPush was written on WMF5.1
-* Ability to establish CimSessions/PSSessions to target node
+- Variable scope
+  - Because configuration scripts are dot-sourced by the module during compilation, certain script-scoped variables are available in the configurations during runtime
+    - All parameters of the `Write-CompositeConfig` function
+    - $targetIP
+      - Contains the IP address of the target Node
+    - $configData
+      - Contains all the data values stored in the Variables property of the TargetNode object
+      - Sets `PSDscAllowPlainTextPassword` and `PSDscAllowDomainUser` to `$true`
 
 
 # Concept of Operations
+Much of the documentation for the module itself is contained in the comment-based help of each function.  The concept of operations provides guidance on how the module should be setup and executed on the authoring Node.
 
-## Recommended Workspace Directory Structure
-
+## Default Workspace Directory Structure
 - C:\workspace
-  - Modules (put other required modules here)
-    - DSCPush
+  - certificates
+    - Any certificates generated or referenced by the module should be placed here
+  - configs
+    - Configuration files are stored in this directory
+    - Partial configurations are not supported in the most recent version of the module
+  - contentStore
+    - Files that are to be copied to target Nodes marked as ContentHost should be placed here
+  - modules
+    - Place DscPush module here as well as any other required modules
+    - DscPush
       - DscPush.psd1
       - DscPush.psm1
-  - DSCPushSetup
-    - DefinitionStore (put your Node Definition Files here)
-      - [NodeDefinition.ps1]
-    - Settings
-      - NodeTemplate.ps1
-      - PartialDependencies.json
-  - Partials
-    - [Partial Configurations here]
-  - Resources
-    - [Required DSC Resources here]
+  - mofStore
+    - Generated mofs and meta mofs will be placed here
+  - nodeDefinitions
+    - NodeDefinition files should be placed here
+  - resources
+    - Place RoleDeploy resource here as well as any other required resource modules
+  - settings
+    - Secrets related files and (deprecated) NodeTemplates are placed here
+  - deploy.ps1
+    - Main deployment initialization script. Run this to deploy configurations defined in the NodeDefinitions to target Nodes
+  - deploy.Tests.ps1
+    - Post-deployment test script that runs various checks on target Nodes to ensure published configurations have applied successfully
+  - deployVM-HyperV.ps1
+    - Script to generate Hyper-V VMs from NodeDefinition files  
 
-
-## Process Flow
-
-1. Generate your Partial Configuration Catalog 
-   - Run Initialize-DscPush -GeneratePartialCatalog
-2. Populate Node Template File ($\DscPushSetup\Settings\NodeTemplate.ps1)
-   - Edit Node and Config properties to match infrastructure
-     - ConfigName
-     - TargetIP
-     - ContentHost
-     - RoleList (List of partials that apply to the Config)
-3. Generate your Node Definition File
-   - Run Initialize-DscPush -GenerateNewNodeDefinitionFile -NodeDefinitionFilePath $filePath
-     - Inputs
-       - Partial Catalog Path (Generated in Step 1.)
-       - Node Template File Path (Edited in Step 2.)
-       - Node Definition File Path (Location for Generating Node Definition File. e.g. $\DscPushSetup\DefinitionStore\NodeDefinition.ps1)
-     - Outputs
-       - Node Definition File
-4. Securely store credentials required by partials
-   - Run Initialize-DscPush -GenerateSecrets
-     - Inputs
-       - Node Definition File Path (Generated in Step 3 and modified in Step 4)
-     - Outputs
-       - Securely Stored Secrets File (e.g. $\DscPushSetup\Settings\StoredSecrets.ps1)
-       - Secrets Key File - 256-bit AES Key (e.g. $\DscPushSetup\Settings\SecretsKey.json)
-5. Edit Node Definition File
-   - Replace all instances of “ENTER_VALUE_HERE” with appropriate target config values.
-6. Publish the Node Definitions (Configs with values stored in Node Definition File)
-   - Run Publish-RpsConfiguration
+## General Process Flow
+1. 
 
 
 # Lexicon
