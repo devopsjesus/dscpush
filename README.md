@@ -168,7 +168,8 @@ $deployParams = @{
 C:\deploy\deployVM-HyperV.ps1 @deployParams
 ```
 4. Execute the `deploy.ps1` script to publish the TargetConfig in the NodeDefinition file to the target Node
-  1. notes
+  1. The default setting for MOF encryption is to have the target generate the Private Key and copy the public key back to the authoring Node using the EnableTargetMofEncryption and GenerateMofEncryptionCert switches.
+  2. 
 ```
 $params = @{
     WorkspacePath             = "C:\deploy"
